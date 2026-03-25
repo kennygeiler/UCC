@@ -1,0 +1,60 @@
+"""APScheduler job definitions for cadenced UCC scraping.
+
+Tier 1: daily, Tier 2: every 36 hours, Tier 3: every 48 hours.
+"""
+
+import asyncio
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
+
+from app.logging import get_logger
+from app.scrapers.rate_limiter import RateLimiter
+from app.scrapers.registry import SCRAPER_REGISTRY
+
+logger = get_logger("scheduler")
+
+
+async def run_scraper(state_code: str, rate_limiter: RateLimiter) -> None:
+    """Execute a single state scraper run.
+
+    Args:
+        state_code: Two-letter state code to scrape.
+        rate_limiter: Shared rate limiter instance.
+    """
+    entry = SCRAPER_REGISTRY.get(state_code)
+    if not entry:
+        logger.warning("unknown_state", state=state_code)
+        return
+    scraper = entry["class"](rate_limiter=rate_limiter)
+    try:
+        count = await scraper.scrape()
+        logger.info("scheduled_scrape_done", state=state_code, records=count)
+    except Exception as exc:
+        logger.error("scheduled_scrape_failed", state=state_code, error=str(exc))
+
+
+def create_scheduler() -> AsyncIOScheduler:
+    """Create and configure the APScheduler with tiered scrape jobs.
+
+    Returns:
+        Configured AsyncIOScheduler (not yet started).
+    """
+    scheduler = AsyncIOScheduler()
+    rate_limiter = RateLimiter()
+
+    tier_intervals = {1: 24, 2: 36, 3: 48}
+
+    for state_code, info in SCRAPER_REGISTRY.items():
+        hours = tier_intervals.get(info["tier"], 48)
+        scheduler.add_job(
+            run_scraper,
+            trigger=IntervalTrigger(hours=hours),
+            args=[state_code, rate_limiter],
+            id=f"scrape_{state_code}",
+            name=f"Scrape {state_code} (Tier {info['tier']})",
+            replace_existing=True,
+        )
+
+    logger.info("scheduler_configured", total_jobs=len(SCRAPER_REGISTRY))
+    return scheduler
