@@ -29,6 +29,13 @@ async def lifespan(application: FastAPI):
 
 app = FastAPI(title="UCC Pipeline", lifespan=lifespan)
 
+# Mount dashboard and webhook routes
+from app.dashboard.routes import router as dashboard_router
+from app.export.webhook import router as webhook_router
+
+app.include_router(dashboard_router)
+app.include_router(webhook_router)
+
 
 @app.get("/health")
 async def health_check():
