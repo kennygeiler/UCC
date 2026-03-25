@@ -1,0 +1,13 @@
+[build]
+builder = "NIXPACKS"
+
+[deploy]
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+
+# Service-specific overrides applied via Railway dashboard:
+# pipeline (web): restartPolicyType = ON_FAILURE
+# agent:          restartPolicyType = ON_FAILURE
+# watchdog:       restartPolicyType = ALWAYS
