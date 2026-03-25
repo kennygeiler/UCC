@@ -190,3 +190,49 @@ async def write_heartbeat() -> None:
             )
         session.add(hb)
     logger.debug("heartbeat_written")
+
+
+def build_agent_graph():
+    """Assemble and compile the LangGraph self-healing agent graph.
+
+    Returns:
+        Compiled LangGraph graph ready for invocation.
+    """
+    from langgraph.graph import StateGraph, END
+
+    graph = StateGraph(AgentState)
+    graph.add_node("detect", detect)
+    graph.add_node("diagnose", diagnose)
+    graph.add_node("repair", repair)
+    graph.add_node("verify", verify)
+    graph.add_node("alert", alert)
+
+    graph.set_entry_point("detect")
+    graph.add_edge("detect", "diagnose")
+    graph.add_edge("diagnose", "repair")
+    graph.add_edge("repair", "verify")
+    graph.add_edge("verify", "alert")
+    graph.add_edge("alert", END)
+
+    return graph.compile()
+
+
+async def run_agent_cycle() -> AgentState:
+    """Execute one full detect-diagnose-repair-verify-alert cycle.
+
+    Returns:
+        Final agent state after the cycle.
+    """
+    await write_heartbeat()
+    compiled = build_agent_graph()
+    initial_state: AgentState = {
+        "anomalies": [],
+        "diagnosis": None,
+        "repair_branch": None,
+        "ci_passed": None,
+        "alert_sent": False,
+        "iteration": 0,
+    }
+    result = await compiled.ainvoke(initial_state)
+    await write_heartbeat()
+    return result
