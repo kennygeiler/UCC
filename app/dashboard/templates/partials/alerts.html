@@ -1,0 +1,19 @@
+<div class="space-y-2">
+    {% for alert in alerts %}
+    <div class="flex items-start gap-3 py-2 border-b border-gray-100">
+        <span class="text-xs px-2 py-1 rounded
+            {% if alert.type == 'HALT' %}bg-red-100 text-red-700
+            {% elif alert.type == 'WARNING' %}bg-yellow-100 text-yellow-700
+            {% else %}bg-gray-100 text-gray-600{% endif %}">
+            {{ alert.type }}
+        </span>
+        <div>
+            <p class="text-sm">{{ alert.detail }}</p>
+            <p class="text-xs text-gray-400">{{ alert.component }} · {{ alert.time }}</p>
+        </div>
+    </div>
+    {% endfor %}
+    {% if not alerts %}
+    <p class="text-gray-400 text-sm">No recent alerts</p>
+    {% endif %}
+</div>

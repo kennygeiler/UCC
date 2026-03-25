@@ -1,0 +1,28 @@
+<table class="w-full text-sm">
+    <thead>
+        <tr class="text-left text-gray-500 border-b">
+            <th class="pb-2">State</th>
+            <th class="pb-2">Status</th>
+            <th class="pb-2">Records Found</th>
+            <th class="pb-2">Last Run</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for s in scrapers %}
+        <tr class="border-b border-gray-100">
+            <td class="py-2 font-medium">{{ s.state }}</td>
+            <td class="py-2">
+                {% if s.status == 'completed' %}
+                <span class="text-green-600">Completed</span>
+                {% elif s.status == 'running' %}
+                <span class="text-blue-600">Running</span>
+                {% else %}
+                <span class="text-red-600">{{ s.status }}</span>
+                {% endif %}
+            </td>
+            <td class="py-2">{{ s.records_found }}</td>
+            <td class="py-2 text-gray-500">{{ s.last_run }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>

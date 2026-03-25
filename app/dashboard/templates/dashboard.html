@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UCC Business Debt — Pipeline Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <h1 class="text-3xl font-bold mb-8">Pipeline Dashboard</h1>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Total Leads</p>
+                <p class="text-2xl font-bold">{{ total_leads }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Enriched</p>
+                <p class="text-2xl font-bold text-blue-600">{{ enriched_leads }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Compliance Cleared</p>
+                <p class="text-2xl font-bold text-green-600">{{ cleared_leads }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Exported to Campaign</p>
+                <p class="text-2xl font-bold text-purple-600">{{ exported_leads }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-sm text-gray-500">Blocked (Compliance)</p>
+                <p class="text-2xl font-bold text-red-600">{{ blocked_leads }}</p>
+            </div>
+        </div>
+
+        <!-- Scraper Status -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Scraper Status</h2>
+            <div hx-get="/dashboard/scrapers" hx-trigger="load, every 30s" hx-swap="innerHTML">
+                <p class="text-gray-400">Loading scraper status...</p>
+            </div>
+        </div>
+
+        <!-- Recent Alerts -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Recent Alerts</h2>
+            <div hx-get="/dashboard/alerts" hx-trigger="load, every 30s" hx-swap="innerHTML">
+                <p class="text-gray-400">Loading alerts...</p>
+            </div>
+        </div>
+
+        <!-- Tier Upload -->
+        <div class="bg-white rounded-lg shadow p-6">
+            <h2 class="text-xl font-semibold mb-4">Upload Rep Tier Assignment</h2>
+            <form hx-post="/dashboard/upload-tiers" hx-encoding="multipart/form-data" hx-swap="innerHTML" hx-target="#upload-result">
+                <input type="file" name="file" accept=".csv" class="mb-4 block">
+                <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">Upload CSV</button>
+            </form>
+            <div id="upload-result" class="mt-4"></div>
+        </div>
+    </div>
+</body>
+</html>
