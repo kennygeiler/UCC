@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     DNC_SCRUB_API_KEY: str | None = None
     BLACKLIST_API_KEY: str | None = None
 
+    # Proxy rotation (Tier-3 states)
+    PROXY_URL: str | None = None
+
     # Self-healing agent
     ANTHROPIC_API_KEY: str | None = None
 

@@ -77,15 +77,24 @@ class BaseScraper(ABC):
             raise
 
     async def _fetch(self) -> str:
-        """Fetch HTML from the state portal with rate limiting and UA rotation."""
-        await self.rate_limiter.wait(self.state_code)
+        """Fetch HTML from the state portal with rate limiting and UA rotation.
+
+        Tier-3 states use proxy rotation and enforced 10-second delays (C-09).
+        """
+        await self.rate_limiter.wait(self.state_code, tier=self.tier)
         url = self.build_search_url()
         headers = {"User-Agent": get_random_user_agent()}
-        async with httpx.AsyncClient(timeout=30.0) as client:
+        proxy = self.rate_limiter.get_proxy(tier=self.tier)
+        async with httpx.AsyncClient(timeout=30.0, proxy=proxy) as client:
             response = await client.get(url, headers=headers)
             response.raise_for_status()
         self.rate_limiter.record_success(self.state_code)
-        logger.info("fetch_complete", state=self.state_code, url=url)
+        logger.info(
+            "fetch_complete",
+            state=self.state_code,
+            url=url,
+            proxy=bool(proxy),
+        )
         return response.text
 
     async def _persist(self, filings: list[dict]) -> int:
