@@ -1,13 +1,32 @@
 [build]
 builder = "NIXPACKS"
 
+# ---------------------------------------------------------------------------
+# Pipeline service (default / web) — FastAPI dashboard + webhook receiver
+# ---------------------------------------------------------------------------
 [deploy]
-restartPolicyType = "ON_FAILURE"
-restartPolicyMaxRetries = 10
+startCommand = "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
 healthcheckPath = "/health"
 healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
 
-# Service-specific overrides applied via Railway dashboard:
-# pipeline (web): restartPolicyType = ON_FAILURE
-# agent:          restartPolicyType = ON_FAILURE
-# watchdog:       restartPolicyType = ALWAYS
+# ---------------------------------------------------------------------------
+# Agent service — self-healing LangGraph agent (5-min cycle)
+# ---------------------------------------------------------------------------
+[service.agent]
+startCommand = "uvicorn agent.main:app --host 0.0.0.0 --port ${PORT:-8001}"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# ---------------------------------------------------------------------------
+# Watchdog service — independent deadman-switch monitor (C-07: zero app/agent imports)
+# ---------------------------------------------------------------------------
+[service.watchdog]
+startCommand = "uvicorn watchdog.main:app --host 0.0.0.0 --port ${PORT:-8002}"
+healthcheckPath = "/health"
+healthcheckTimeout = 300
+restartPolicyType = "ALWAYS"
+restartPolicyMaxRetries = 0
