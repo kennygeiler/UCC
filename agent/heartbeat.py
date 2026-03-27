@@ -38,6 +38,7 @@ async def heartbeat_loop() -> None:
                         status="alive",
                     )
                 session.add(hb)
+                await session.commit()
             log.debug("heartbeat_written")
         except Exception as exc:
             log.error("heartbeat_write_failed", error=str(exc))
