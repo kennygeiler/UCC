@@ -1,6 +1,6 @@
 [build-system]
 requires = ["setuptools>=68.0", "wheel"]
-build-backend = "setuptools.backends._legacy:_Backend"
+build-backend = "setuptools.build_meta"
 
 [project]
 name = "ucc-pipeline"
@@ -25,6 +25,9 @@ dependencies = [
     "anthropic>=0.30.0",
     "sendgrid>=6.10.0",
     "PyGithub>=2.0.0",
+    "playwright>=1.40.0",
+    "beautifulsoup4>=4.12.0",
+    "twilio>=9.0.0",
 ]
 
 [project.optional-dependencies]
