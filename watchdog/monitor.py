@@ -21,6 +21,9 @@ SENTRY_DSN = os.environ.get("SENTRY_DSN", "")
 HEARTBEAT_STALE_MINUTES = 5
 CHECK_INTERVAL_SECONDS = 300  # 5 minutes
 ALERT_COOLDOWN_MINUTES = 60
+LEAD_FLOW_WINDOW_MINUTES = 30
+BUSINESS_HOUR_START = 8   # 8 AM ET
+BUSINESS_HOUR_END = 18    # 6 PM ET
 
 _last_alert_time: datetime | None = None
 
@@ -98,8 +101,48 @@ async def send_alert(subject: str, body: str) -> bool:
         return False
 
 
+def _is_business_hours() -> bool:
+    """Check if current time is within business hours (ET)."""
+    from zoneinfo import ZoneInfo
+    now_et = datetime.now(ZoneInfo("America/New_York"))
+    # Monday=0 .. Friday=4
+    if now_et.weekday() > 4:
+        return False
+    return BUSINESS_HOUR_START <= now_et.hour < BUSINESS_HOUR_END
+
+
+async def check_lead_flow() -> bool:
+    """Check if new leads have been inserted within the expected window.
+
+    Returns:
+        True if lead flow is healthy (recent records exist or outside business hours).
+    """
+    if not _is_business_hours():
+        return True  # Don't alert outside business hours
+
+    if not DATABASE_URL:
+        return True  # Can't check — don't false-alarm
+
+    engine = create_async_engine(_make_url(DATABASE_URL))
+    try:
+        async with engine.begin() as conn:
+            result = await conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM leads "
+                    "WHERE created_at >= NOW() - MAKE_INTERVAL(mins => :minutes)"
+                ),
+                {"minutes": LEAD_FLOW_WINDOW_MINUTES},
+            )
+            count = result.scalar() or 0
+        return count > 0
+    except Exception:
+        return True  # Table may not exist yet — don't false-alarm
+    finally:
+        await engine.dispose()
+
+
 async def run_watchdog_loop() -> None:
-    """Main watchdog loop — check heartbeat every 5 minutes."""
+    """Main watchdog loop — check heartbeat and lead flow every 5 minutes."""
     while True:
         is_alive = await check_heartbeat()
         if not is_alive:
@@ -112,4 +155,19 @@ async def run_watchdog_loop() -> None:
                     "Please check the Railway dashboard for the agent service status."
                 ),
             )
+
+        # Lead flow check: stale heartbeat + no recent leads = probable outage
+        if not is_alive:
+            leads_ok = await check_lead_flow()
+            if not leads_ok:
+                await send_alert(
+                    subject="UCC Pipeline Alert: Lead Flow Stopped",
+                    body=(
+                        f"No new leads have been recorded in the last {LEAD_FLOW_WINDOW_MINUTES} minutes "
+                        "during business hours, and the self-healing agent heartbeat is stale. "
+                        "The pipeline may be completely down. "
+                        "Please check the Railway dashboard immediately."
+                    ),
+                )
+
         await asyncio.sleep(CHECK_INTERVAL_SECONDS)
