@@ -3,12 +3,19 @@
 Autonomous agent monitoring pipeline health with priority-based repair.
 """
 
+from __future__ import annotations
+
+import json
 from datetime import datetime, timezone
-from typing import TypedDict
+from typing import Any, TypedDict
+
+from langgraph.graph import END, StateGraph
 
 from app.logging import get_logger
 
 logger = get_logger("agent_graph")
+
+MAX_DETECT_RETRIES = 3
 
 
 class AgentState(TypedDict):
@@ -64,7 +71,8 @@ async def detect(state: AgentState) -> AgentState:
             })
 
     state["anomalies"] = anomalies
-    logger.info("detect_complete", anomaly_count=len(anomalies))
+    state["iteration"] = state.get("iteration", 0) + 1
+    logger.info("detect_complete", anomaly_count=len(anomalies), iteration=state["iteration"])
     return state
 
 
@@ -192,39 +200,122 @@ async def write_heartbeat() -> None:
     logger.debug("heartbeat_written")
 
 
-def build_agent_graph():
+def _route_after_detect(state: AgentState) -> str:
+    """Conditional routing after detect node.
+
+    If anomalies were found, proceed to diagnose.
+    If none found and we haven't exhausted retries, loop back to detect.
+    Otherwise end the cycle (no work to do).
+    """
+    if state["anomalies"]:
+        return "diagnose"
+    if state.get("iteration", 1) < MAX_DETECT_RETRIES:
+        logger.info("no_anomalies_retrying", iteration=state["iteration"])
+        return "detect"
+    logger.info("no_anomalies_cycle_end", iterations=state["iteration"])
+    return END
+
+
+# ---------------------------------------------------------------------------
+# Postgres checkpointer using the existing langgraph_checkpoints table
+# ---------------------------------------------------------------------------
+
+class _PostgresCheckpointer:
+    """Async checkpointer backed by the langgraph_checkpoints table.
+
+    Uses the project's existing SQLAlchemy async session infrastructure
+    so no additional connection pool is needed.
+    """
+
+    async def aget(self, config: dict[str, Any]) -> dict[str, Any] | None:
+        from sqlalchemy import select
+        from app.db import get_session
+        from app.models.operations import LanggraphCheckpoint
+
+        thread_id = config["configurable"]["thread_id"]
+        async with get_session() as session:
+            result = await session.execute(
+                select(LanggraphCheckpoint)
+                .where(LanggraphCheckpoint.thread_id == thread_id)
+                .order_by(LanggraphCheckpoint.created_at.desc())
+                .limit(1)
+            )
+            row = result.scalar_one_or_none()
+            if row is None:
+                return None
+            return row.checkpoint
+
+    async def aput(self, config: dict[str, Any], data: dict[str, Any], metadata: dict[str, Any] | None = None) -> None:
+        from app.db import get_session
+        from app.models.operations import LanggraphCheckpoint
+
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint = LanggraphCheckpoint(
+            thread_id=thread_id,
+            checkpoint=data if isinstance(data, dict) else json.loads(json.dumps(data, default=str)),
+            metadata_=metadata,
+        )
+        async with get_session() as session:
+            session.add(checkpoint)
+
+
+def _get_checkpointer() -> _PostgresCheckpointer:
+    return _PostgresCheckpointer()
+
+
+# ---------------------------------------------------------------------------
+# Graph assembly
+# ---------------------------------------------------------------------------
+
+def build_agent_graph(*, checkpointer: Any | None = None):
     """Assemble and compile the LangGraph self-healing agent graph.
+
+    Args:
+        checkpointer: Optional checkpointer instance. When *None* the
+            Postgres-backed checkpointer is used by default.
 
     Returns:
         Compiled LangGraph graph ready for invocation.
     """
-    from langgraph.graph import StateGraph, END
-
     graph = StateGraph(AgentState)
+
+    # -- nodes --
     graph.add_node("detect", detect)
     graph.add_node("diagnose", diagnose)
     graph.add_node("repair", repair)
     graph.add_node("verify", verify)
     graph.add_node("alert", alert)
 
+    # -- entry point --
     graph.set_entry_point("detect")
-    graph.add_edge("detect", "diagnose")
+
+    # -- edges with conditional routing after detect --
+    graph.add_conditional_edges("detect", _route_after_detect)
     graph.add_edge("diagnose", "repair")
     graph.add_edge("repair", "verify")
     graph.add_edge("verify", "alert")
     graph.add_edge("alert", END)
 
-    return graph.compile()
+    if checkpointer is None:
+        checkpointer = _get_checkpointer()
+
+    return graph.compile(checkpointer=checkpointer)
 
 
-async def run_agent_cycle() -> AgentState:
+# Module-level compiled graph for import by agent/main.py
+compiled_graph = build_agent_graph()
+
+
+async def run_agent_cycle(thread_id: str = "self-healing") -> AgentState:
     """Execute one full detect-diagnose-repair-verify-alert cycle.
+
+    Args:
+        thread_id: Checkpoint thread identifier for state persistence.
 
     Returns:
         Final agent state after the cycle.
     """
     await write_heartbeat()
-    compiled = build_agent_graph()
     initial_state: AgentState = {
         "anomalies": [],
         "diagnosis": None,
@@ -233,6 +324,9 @@ async def run_agent_cycle() -> AgentState:
         "alert_sent": False,
         "iteration": 0,
     }
-    result = await compiled.ainvoke(initial_state)
+    result = await compiled_graph.ainvoke(
+        initial_state,
+        config={"configurable": {"thread_id": thread_id}},
+    )
     await write_heartbeat()
     return result

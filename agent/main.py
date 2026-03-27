@@ -24,7 +24,7 @@ AGENT_INTERVAL_SECONDS = 300  # 5 minutes between cycles
 
 async def _agent_loop():
     """Run the self-healing agent on a recurring schedule."""
-    from agent.graph import run_agent_cycle, write_heartbeat
+    from agent.graph import run_agent_cycle, write_heartbeat, compiled_graph  # noqa: F401
     from app.logging import get_logger
     log = get_logger("agent_loop")
 
