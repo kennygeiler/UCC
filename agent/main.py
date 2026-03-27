@@ -39,10 +39,14 @@ async def _agent_loop():
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Start agent loop on startup, cancel on shutdown."""
-    task = asyncio.create_task(_agent_loop())
+    """Start agent loop and heartbeat writer on startup, cancel on shutdown."""
+    from agent.heartbeat import heartbeat_loop
+
+    agent_task = asyncio.create_task(_agent_loop())
+    heartbeat_task = asyncio.create_task(heartbeat_loop())
     yield
-    task.cancel()
+    heartbeat_task.cancel()
+    agent_task.cancel()
 
 
 app = FastAPI(title="UCC Agent", lifespan=lifespan)
