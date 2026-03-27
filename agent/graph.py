@@ -5,10 +5,13 @@ Autonomous agent monitoring pipeline health with priority-based repair.
 
 from __future__ import annotations
 
+import asyncio
+import base64
 import json
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
+import httpx
 from langgraph.graph import END, StateGraph
 
 from app.logging import get_logger
@@ -23,6 +26,7 @@ class AgentState(TypedDict):
     anomalies: list[dict]
     diagnosis: str | None
     repair_branch: str | None
+    repair_pr_number: int | None
     ci_passed: bool | None
     alert_sent: bool
     iteration: int
@@ -77,67 +81,356 @@ async def detect(state: AgentState) -> AgentState:
 
 
 async def diagnose(state: AgentState) -> AgentState:
-    """Diagnose anomalies using LLM-based analysis.
+    """Diagnose anomalies using Claude API analysis.
 
-    Produces a human-readable diagnosis for the alerter node.
+    Calls Anthropic's Claude to produce a plain-English diagnosis
+    suitable for non-technical stakeholders (C-11).
     """
     if not state["anomalies"]:
         state["diagnosis"] = None
         return state
 
-    # Build diagnosis from anomaly patterns
-    summaries = []
-    for a in state["anomalies"][:5]:
-        summaries.append(f"{a['type']}: {a.get('state', a.get('component', 'unknown'))} - {a.get('error', a.get('detail', ''))}")
+    from app.config import Settings
+    settings = Settings()
 
-    state["diagnosis"] = "Issues detected:\n" + "\n".join(f"- {s}" for s in summaries)
-    logger.info("diagnosis_complete", issues=len(summaries))
+    anomaly_text = json.dumps(state["anomalies"][:10], indent=2, default=str)
+
+    try:
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        response = await client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=1024,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "You are a pipeline health analyst for a UCC lead-generation system. "
+                    "Analyze these anomalies and produce a plain-English diagnosis. "
+                    "No jargon — write as if explaining to a business manager.\n\n"
+                    "Anomalies:\n" + anomaly_text + "\n\n"
+                    "Provide: 1) What went wrong, 2) Likely root cause, "
+                    "3) Business impact, 4) Recommended action."
+                ),
+            }],
+        )
+        state["diagnosis"] = response.content[0].text
+        logger.info("diagnosis_complete", source="claude_api", anomaly_count=len(state["anomalies"]))
+    except Exception as exc:
+        logger.error("diagnosis_api_failed", error=str(exc))
+        # Fallback: build diagnosis from anomaly data directly
+        summaries = []
+        for a in state["anomalies"][:5]:
+            summaries.append(
+                f"{a['type']}: {a.get('state', a.get('component', 'unknown'))} "
+                f"- {a.get('error', a.get('detail', ''))}"
+            )
+        state["diagnosis"] = "Issues detected:\n" + "\n".join(f"- {s}" for s in summaries)
+        await create_github_issue(
+            title=f"[Agent] Diagnosis API failure: {type(exc).__name__}",
+            body=f"Claude API call failed during diagnose step.\n\nError: {exc}\n\nFallback diagnosis was used.",
+            labels=["auto-detected", "agent-error"],
+        )
+
     return state
 
 
-async def repair(state: AgentState) -> AgentState:
-    """Attempt automated repair via GitHub branch + CI.
+async def _github_api(
+    method: str, path: str, *, settings: Any, json_body: dict | None = None,
+) -> dict:
+    """Make an authenticated GitHub API request."""
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        resp = await client.request(
+            method,
+            f"https://api.github.com/repos/{settings.GITHUB_REPO}{path}",
+            json=json_body,
+            headers={
+                "Authorization": f"Bearer {settings.GITHUB_TOKEN}",
+                "Accept": "application/vnd.github+json",
+            },
+        )
+        resp.raise_for_status()
+        if resp.status_code == 204:
+            return {}
+        return resp.json()
 
-    Creates a fix branch, applies repair, triggers CI.
-    """
+
+async def repair(state: AgentState) -> AgentState:
+    """Create a GitHub branch, generate a fix via Claude, commit the patch, and open a PR."""
     if not state["diagnosis"]:
         state["repair_branch"] = None
         return state
 
-    # Stub: actual repair would use Claude API to generate fix
+    from app.config import Settings
+    settings = Settings()
+
+    if not settings.GITHUB_TOKEN or not settings.GITHUB_REPO:
+        logger.warning("repair_skipped_no_github_config")
+        state["repair_branch"] = None
+        return state
+
     branch_name = f"auto-fix/{datetime.now(timezone.utc).strftime('%Y%m%d-%H%M%S')}"
-    state["repair_branch"] = branch_name
-    logger.info("repair_attempted", branch=branch_name)
+
+    try:
+        # 1. Get default branch SHA
+        repo_info = await _github_api("GET", "", settings=settings)
+        default_branch = repo_info.get("default_branch", "master")
+        ref_data = await _github_api("GET", f"/git/ref/heads/{default_branch}", settings=settings)
+        base_sha = ref_data["object"]["sha"]
+
+        # 2. Create the fix branch
+        await _github_api("POST", "/git/refs", settings=settings, json_body={
+            "ref": f"refs/heads/{branch_name}",
+            "sha": base_sha,
+        })
+        logger.info("repair_branch_created", branch=branch_name)
+
+        # 3. Generate fix via Claude API
+        import anthropic
+        client = anthropic.AsyncAnthropic(api_key=settings.ANTHROPIC_API_KEY)
+        fix_response = await client.messages.create(
+            model="claude-sonnet-4-20250514",
+            max_tokens=2048,
+            messages=[{
+                "role": "user",
+                "content": (
+                    "You are a Python developer fixing a UCC lead-generation pipeline. "
+                    "Based on this diagnosis, generate a minimal Python patch.\n\n"
+                    f"Diagnosis:\n{state['diagnosis']}\n\n"
+                    "Return ONLY a JSON object with keys:\n"
+                    '  "file_path": relative path to fix (e.g. "app/scrapers/sos.py"),\n'
+                    '  "description": one-line summary of the fix,\n'
+                    '  "content": the full corrected file content.\n'
+                    "Return raw JSON, no markdown fences."
+                ),
+            }],
+        )
+        fix_text = fix_response.content[0].text.strip()
+        # Strip markdown fences if present
+        if fix_text.startswith("```"):
+            fix_text = "\n".join(fix_text.split("\n")[1:])
+            if fix_text.endswith("```"):
+                fix_text = fix_text[:-3].strip()
+        fix_data = json.loads(fix_text)
+
+        # 4. Commit the patch to the branch
+        file_path = fix_data["file_path"]
+        file_content = fix_data["content"]
+        encoded = base64.b64encode(file_content.encode()).decode()
+
+        # Get current file SHA (if it exists) for update
+        try:
+            existing = await _github_api("GET", f"/contents/{file_path}?ref={branch_name}", settings=settings)
+            file_sha = existing.get("sha")
+        except httpx.HTTPStatusError:
+            file_sha = None
+
+        commit_body: dict[str, Any] = {
+            "message": f"fix: {fix_data.get('description', 'auto-repair')}",
+            "content": encoded,
+            "branch": branch_name,
+        }
+        if file_sha:
+            commit_body["sha"] = file_sha
+
+        await _github_api("PUT", f"/contents/{file_path}", settings=settings, json_body=commit_body)
+        logger.info("repair_patch_committed", file=file_path, branch=branch_name)
+
+        # 5. Open a PR
+        pr_data = await _github_api("POST", "/pulls", settings=settings, json_body={
+            "title": f"[Auto-Fix] {fix_data.get('description', 'Automated repair')}",
+            "body": (
+                "## Automated Repair\n\n"
+                f"**Diagnosis:**\n{state['diagnosis'][:500]}\n\n"
+                f"**Fix applied to:** `{file_path}`\n\n"
+                "This PR was created automatically by the self-healing agent. "
+                "Please review before merging."
+            ),
+            "head": branch_name,
+            "base": default_branch,
+        })
+        logger.info("repair_pr_opened", pr_url=pr_data.get("html_url"), pr_number=pr_data.get("number"))
+
+        state["repair_branch"] = branch_name
+        state["repair_pr_number"] = pr_data.get("number")
+
+    except Exception as exc:
+        logger.error("repair_failed", error=str(exc))
+        state["repair_branch"] = None
+        await create_github_issue(
+            title=f"[Agent] Repair failed: {type(exc).__name__}",
+            body=(
+                f"The self-healing agent could not complete a repair.\n\n"
+                f"**Diagnosis:**\n{state.get('diagnosis', 'N/A')[:500]}\n\n"
+                f"**Error:** {exc}\n\n"
+                f"**Branch attempted:** {branch_name}"
+            ),
+            labels=["auto-detected", "repair-failed", "priority-high"],
+        )
+
     return state
 
 
 async def verify(state: AgentState) -> AgentState:
-    """Verify repair by checking CI results.
+    """Poll GitHub Actions CI status on the repair PR branch.
 
-    Merges on pass, creates GitHub issue on fail.
+    Polls up to 10 times (30s intervals, ~5 min max) for CI to complete.
     """
     if not state["repair_branch"]:
         state["ci_passed"] = None
         return state
 
-    # Stub: actual verification would check GitHub Actions status
-    state["ci_passed"] = False  # Conservative default
-    logger.info("verify_complete", ci_passed=state["ci_passed"])
+    from app.config import Settings
+    settings = Settings()
+
+    if not settings.GITHUB_TOKEN or not settings.GITHUB_REPO:
+        state["ci_passed"] = None
+        return state
+
+    branch = state["repair_branch"]
+    max_polls = 10
+    poll_interval = 30  # seconds
+
+    try:
+        for attempt in range(max_polls):
+            runs = await _github_api(
+                "GET", f"/actions/runs?branch={branch}&per_page=1", settings=settings,
+            )
+            workflow_runs = runs.get("workflow_runs", [])
+
+            if not workflow_runs:
+                logger.info("verify_no_runs_yet", branch=branch, attempt=attempt + 1)
+                if attempt < max_polls - 1:
+                    await asyncio.sleep(poll_interval)
+                continue
+
+            run = workflow_runs[0]
+            status = run.get("status")
+            conclusion = run.get("conclusion")
+
+            if status == "completed":
+                ci_passed = conclusion == "success"
+                state["ci_passed"] = ci_passed
+                logger.info(
+                    "verify_complete",
+                    ci_passed=ci_passed,
+                    conclusion=conclusion,
+                    run_url=run.get("html_url"),
+                )
+                if not ci_passed:
+                    await create_github_issue(
+                        title=f"[Agent] CI failed on auto-fix branch {branch}",
+                        body=(
+                            f"CI concluded with **{conclusion}** on branch `{branch}`.\n\n"
+                            f"**Run:** {run.get('html_url', 'N/A')}\n\n"
+                            f"**Diagnosis:**\n{state.get('diagnosis', 'N/A')[:500]}\n\n"
+                            "Manual intervention required."
+                        ),
+                        labels=["auto-detected", "ci-failed", "priority-high"],
+                    )
+                return state
+
+            logger.info("verify_ci_pending", status=status, attempt=attempt + 1)
+            if attempt < max_polls - 1:
+                await asyncio.sleep(poll_interval)
+
+        # Timed out waiting for CI
+        state["ci_passed"] = False
+        logger.warning("verify_ci_timeout", branch=branch, polls=max_polls)
+        await create_github_issue(
+            title=f"[Agent] CI timed out on {branch}",
+            body=f"CI did not complete within {max_polls * poll_interval}s for branch `{branch}`.",
+            labels=["auto-detected", "ci-timeout"],
+        )
+
+    except Exception as exc:
+        logger.error("verify_failed", error=str(exc))
+        state["ci_passed"] = False
+        await create_github_issue(
+            title=f"[Agent] Verify step failed: {type(exc).__name__}",
+            body=f"Error polling CI for branch `{branch}`:\n\n{exc}",
+            labels=["auto-detected", "agent-error"],
+        )
+
     return state
 
 
 async def alert(state: AgentState) -> AgentState:
-    """Send plain-English email alert to manager.
-
-    No more than one email per unique failure type per 24 hours.
-    """
+    """Send a plain-English email alert to the manager via SendGrid (C-11: no jargon)."""
     if not state["diagnosis"]:
         state["alert_sent"] = False
         return state
 
-    # Stub: actual alerting would use SendGrid
-    logger.info("alert_sent", diagnosis_preview=state["diagnosis"][:100])
-    state["alert_sent"] = True
+    from app.config import Settings
+    settings = Settings()
+
+    if not settings.SENDGRID_API_KEY or not settings.MANAGER_EMAIL:
+        logger.warning("alert_skipped_no_sendgrid_config")
+        state["alert_sent"] = False
+        return state
+
+    # Build plain-English email body
+    ci_status = "not attempted"
+    if state.get("ci_passed") is True:
+        ci_status = "passed — the fix looks good and is ready for your review"
+    elif state.get("ci_passed") is False:
+        ci_status = "failed — the automated fix needs manual attention"
+
+    repair_info = ""
+    if state.get("repair_branch"):
+        repair_info = (
+            f"\n\nWhat we did about it:\n"
+            f"We created an automated fix on branch '{state['repair_branch']}'. "
+            f"The automated tests {ci_status}."
+        )
+    else:
+        repair_info = "\n\nWe were unable to create an automated fix. Our team will need to look into this manually."
+
+    body = (
+        f"Hi,\n\n"
+        f"The UCC pipeline monitoring system detected an issue that needs your attention.\n\n"
+        f"What happened:\n{state['diagnosis']}\n"
+        f"{repair_info}\n\n"
+        f"If you have questions, please reach out to the engineering team.\n\n"
+        f"— UCC Pipeline Monitor"
+    )
+
+    subject = "UCC Pipeline Alert: Issue Detected"
+    if state.get("ci_passed") is True:
+        subject = "UCC Pipeline: Issue Detected & Auto-Fixed"
+    elif state.get("ci_passed") is False:
+        subject = "UCC Pipeline Alert: Issue Needs Attention"
+
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                json={
+                    "personalizations": [{"to": [{"email": settings.MANAGER_EMAIL}]}],
+                    "from": {"email": "agent@uccbusinessdebt.com", "name": "UCC Pipeline Monitor"},
+                    "subject": subject,
+                    "content": [{"type": "text/plain", "value": body}],
+                },
+                headers={
+                    "Authorization": f"Bearer {settings.SENDGRID_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+            )
+            resp.raise_for_status()
+        state["alert_sent"] = True
+        logger.info("alert_sent", to=settings.MANAGER_EMAIL, subject=subject)
+    except Exception as exc:
+        logger.error("alert_send_failed", error=str(exc))
+        state["alert_sent"] = False
+        await create_github_issue(
+            title=f"[Agent] Alert email failed: {type(exc).__name__}",
+            body=(
+                f"Failed to send alert email to {settings.MANAGER_EMAIL}.\n\n"
+                f"**Error:** {exc}\n\n"
+                f"**Diagnosis that should have been emailed:**\n{state['diagnosis'][:500]}"
+            ),
+            labels=["auto-detected", "alert-failed"],
+        )
+
     return state
 
 
@@ -320,6 +613,7 @@ async def run_agent_cycle(thread_id: str = "self-healing") -> AgentState:
         "anomalies": [],
         "diagnosis": None,
         "repair_branch": None,
+        "repair_pr_number": None,
         "ci_passed": None,
         "alert_sent": False,
         "iteration": 0,
