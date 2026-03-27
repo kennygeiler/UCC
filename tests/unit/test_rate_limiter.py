@@ -137,6 +137,16 @@ def test_get_proxy_rotates():
     assert rl.get_proxy(tier=3) == "http://p1:8080"
 
 
+def test_tier3_with_jitter_never_below_floor():
+    """Tier-3 delay must never drop below TIER3_MIN_DELAY even with jitter."""
+    rl = RateLimiter(base_delay=10.0, jitter_pct=0.20)
+    for _ in range(200):
+        delay = rl._compute_delay("VT", tier=3)
+        assert delay >= TIER3_MIN_DELAY, (
+            f"Tier-3 delay {delay:.4f}s dropped below {TIER3_MIN_DELAY}s floor"
+        )
+
+
 @pytest.mark.asyncio
 async def test_tier3_wait_enforces_floor():
     """Tier-3 wait should enforce at least TIER3_MIN_DELAY between requests."""

@@ -74,12 +74,14 @@ class RateLimiter:
         else:
             delay = self.base_delay
 
-        # Tier-3 floor (C-09): never go below 10 seconds
-        if tier == 3:
-            delay = max(delay, TIER3_MIN_DELAY)
-
         jitter = delay * self.jitter_pct * (2 * random.random() - 1)
-        return max(0.0, delay + jitter)
+        final_delay = max(0.0, delay + jitter)
+
+        # Tier-3 floor (C-09): never go below 10 seconds, applied AFTER jitter
+        if tier == 3:
+            final_delay = max(final_delay, TIER3_MIN_DELAY)
+
+        return final_delay
 
     async def wait(self, state: str, tier: int | None = None) -> None:
         """Wait the appropriate delay before the next request for a state.
