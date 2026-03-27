@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 from typing import Any, TypedDict
 
 import httpx
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 
 from app.logging import get_logger
@@ -513,7 +514,7 @@ def _route_after_detect(state: AgentState) -> str:
 # Postgres checkpointer using the existing langgraph_checkpoints table
 # ---------------------------------------------------------------------------
 
-class _PostgresCheckpointer:
+class _PostgresCheckpointer(BaseCheckpointSaver):
     """Async checkpointer backed by the langgraph_checkpoints table.
 
     Uses the project's existing SQLAlchemy async session infrastructure
@@ -595,8 +596,9 @@ def build_agent_graph(*, checkpointer: Any | None = None):
     return graph.compile(checkpointer=checkpointer)
 
 
-# Module-level compiled graph for import by agent/main.py
-compiled_graph = build_agent_graph()
+# Module-level compiled graph (no checkpointing) for quick import validation.
+# run_agent_cycle() builds a separate graph with the Postgres checkpointer.
+compiled_graph = build_agent_graph(checkpointer=False)
 
 
 async def run_agent_cycle(thread_id: str = "self-healing") -> AgentState:
@@ -609,6 +611,7 @@ async def run_agent_cycle(thread_id: str = "self-healing") -> AgentState:
         Final agent state after the cycle.
     """
     await write_heartbeat()
+    graph = build_agent_graph()  # uses Postgres checkpointer
     initial_state: AgentState = {
         "anomalies": [],
         "diagnosis": None,
@@ -618,7 +621,7 @@ async def run_agent_cycle(thread_id: str = "self-healing") -> AgentState:
         "alert_sent": False,
         "iteration": 0,
     }
-    result = await compiled_graph.ainvoke(
+    result = await graph.ainvoke(
         initial_state,
         config={"configurable": {"thread_id": thread_id}},
     )

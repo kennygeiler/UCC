@@ -20,28 +20,28 @@ templates = Jinja2Templates(directory="app/dashboard/templates")
 async def dashboard_home(request: Request):
     """Main dashboard view — pipeline health overview."""
     stats = await get_dashboard_stats()
-    return templates.TemplateResponse("dashboard.html", {"request": request, **stats})
+    return templates.TemplateResponse(request, "dashboard.html", context=stats)
 
 
 @router.get("/scrapers", response_class=HTMLResponse)
 async def scraper_status(request: Request):
     """Scraper status by state — HTMX partial."""
     scrapers = await get_scraper_status()
-    return templates.TemplateResponse("partials/scrapers.html", {"request": request, "scrapers": scrapers})
+    return templates.TemplateResponse(request, "partials/scrapers.html", context={"scrapers": scrapers})
 
 
 @router.get("/leads", response_class=HTMLResponse)
 async def lead_metrics(request: Request):
     """Lead counts by stage — HTMX partial."""
     stats = await get_dashboard_stats()
-    return templates.TemplateResponse("partials/leads.html", {"request": request, **stats})
+    return templates.TemplateResponse(request, "partials/leads.html", context=stats)
 
 
 @router.get("/alerts", response_class=HTMLResponse)
 async def alerts_view(request: Request):
     """Recent pipeline alerts — HTMX partial."""
     alerts = await get_recent_alerts()
-    return templates.TemplateResponse("partials/alerts.html", {"request": request, "alerts": alerts})
+    return templates.TemplateResponse(request, "partials/alerts.html", context={"alerts": alerts})
 
 
 @router.post("/upload-tiers")

@@ -4,11 +4,12 @@ from app.scrapers.base import BaseScraper
 from app.scrapers.registry import (
     SCRAPER_REGISTRY,
     get_scraper_class,
-    get_tier1_states,
+    get_states_by_tier,
 )
 
 
 EXPECTED_TIER1 = ["CA", "TX", "FL", "NY", "NJ", "GA", "IL", "PA", "OH", "MD"]
+EXPECTED_TIER3 = ["NH", "RI", "DE", "HI", "NV", "UT"]
 
 
 def test_registry_has_all_tier1_states():
@@ -17,15 +18,16 @@ def test_registry_has_all_tier1_states():
         assert state in SCRAPER_REGISTRY, f"{state} missing from registry"
 
 
-def test_registry_has_exactly_10_entries():
-    """Registry should have exactly 10 entries for Tier 1."""
-    assert len(SCRAPER_REGISTRY) == 10
+def test_registry_has_40_entries():
+    """Registry should have 40 entries (10 T1 + 24 T2 + 6 T3)."""
+    assert len(SCRAPER_REGISTRY) == 40
 
 
-def test_all_entries_are_tier_1():
-    """All current registry entries should be tier 1."""
-    for state, info in SCRAPER_REGISTRY.items():
-        assert info["tier"] == 1, f"{state} is not tier 1"
+def test_tier_counts():
+    """Each tier should have the expected number of states."""
+    assert len(get_states_by_tier(1)) == 10
+    assert len(get_states_by_tier(2)) == 24
+    assert len(get_states_by_tier(3)) == 6
 
 
 def test_all_classes_are_base_scraper_subclasses():
@@ -47,10 +49,16 @@ def test_get_scraper_class_returns_none_for_unknown():
     assert get_scraper_class("ZZ") is None
 
 
-def test_get_tier1_states_returns_all():
-    """get_tier1_states should return all 10 Tier 1 state codes."""
-    states = get_tier1_states()
+def test_get_states_by_tier_returns_all_tier1():
+    """get_states_by_tier(1) should return all 10 Tier 1 state codes."""
+    states = get_states_by_tier(1)
     assert set(states) == set(EXPECTED_TIER1)
+
+
+def test_get_states_by_tier_returns_all_tier3():
+    """get_states_by_tier(3) should return all 6 Tier 3 state codes."""
+    states = get_states_by_tier(3)
+    assert set(states) == set(EXPECTED_TIER3)
 
 
 def test_each_scraper_instantiates():

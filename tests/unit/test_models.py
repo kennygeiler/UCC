@@ -100,11 +100,13 @@ def test_compliance_check_instantiation():
 
 
 def test_job_queue_instantiation():
-    """JobQueue can be instantiated with defaults."""
+    """JobQueue can be instantiated with required fields."""
     from app.models import JobQueue
     job = JobQueue(
         job_type="scrape",
         payload={"state": "CA"},
+        status="pending",
+        retry_count=0,
     )
     assert job.job_type == "scrape"
     assert job.status == "pending"
