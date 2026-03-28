@@ -1,0 +1,137 @@
+<assignment>
+  <!-- Builder knows their reviewer from runtime prompt. Sequence: implement -> verify -> REVIEW_REQUEST -> verdict -> report to krs-one -->
+  <milestone>M1 Foundation, Database, and CI/CD</milestone>
+  <deliverable>
+    1. FastAPI application entry point (app/main.py) + stub agent entry point (agent/main.py) + stub watchdog entry point (watchdog/main.py)
+    2. Health check endpoints for all 3 services (/health)
+    3. Procfile with 3 service entries + railway.toml with restart policies and health check paths
+    4. GitHub Actions workflow (.github/workflows/ci.yml) running pytest on push/PR
+    5. Sentry SDK initialized in all 3 service entry points
+    6. pytest conftest improvements + foundational unit tests
+    7. .env.example listing all required/optional environment variables
+  </deliverable>
+  <iteration>2</iteration>
+
+  <commands>
+    pip install -e ".[dev]"
+    pytest -x -v
+    python -c "from app.main import app; print('pipeline app OK')"
+    python -c "from agent.main import app; print('agent app OK')"
+    python -c "from watchdog.main import app; print('watchdog app OK')"
+  </commands>
+
+  <scope>
+    <what>
+      Complete the remaining 7 M1 deliverables. Iteration 1 built the data layer (models, db engine, config, job queue, structlog, Alembic). This iteration builds the service layer, deployment config, CI, and tests on top of it.
+
+      1. SERVICE ENTRY POINTS:
+         - app/main.py: Full FastAPI application. Import and call configure_logging() and sentry_sdk.init() before creating the FastAPI instance. Include a lifespan context manager that disposes the DB engine on shutdown. Mount a /health endpoint.
+         - agent/main.py: Minimal FastAPI stub for the self-healing agent service. Initialize Sentry, configure logging, mount /health. The actual LangGraph agent logic comes in M8 — for now just the entry point skeleton.
+         - watchdog/main.py: Minimal FastAPI stub for the watchdog service. Initialize Sentry and logging independently (watchdog has ZERO imports from app/ or agent/ per C-07). Mount /health. For Sentry DSN and DATABASE_URL, read directly from os.environ or use a minimal local Settings class — do NOT import app.config.
+
+      2. HEALTH CHECK ENDPOINTS:
+         - Each service exposes GET /health returning {"status": "ok"} with HTTP 200.
+         - These paths must match what railway.toml declares as health check paths.
+
+      3. DEPLOYMENT CONFIG:
+         - Procfile with three entries:
+           web: uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}
+           agent: uvicorn agent.main:app --host 0.0.0.0 --port ${PORT:-8001}
+           watchdog: uvicorn watchdog.main:app --host 0.0.0.0 --port ${PORT:-8002}
+         - railway.toml with:
+           [deploy] section for each service with restart policies (pipeline: on-failure, agent: on-failure, watchdog: always) and healthcheckPath: /health
+
+      4. CI WORKFLOW:
+         - .github/workflows/ci.yml: GitHub Actions workflow triggered on push and pull_request to main.
+         - Uses Python 3.12, installs dependencies with pip install -e ".[dev]", runs pytest.
+         - No Postgres service needed in CI yet — tests that need a real DB will be skipped/mocked.
+
+      5. SENTRY INITIALIZATION:
+         - In all three entry points, call sentry_sdk.init(dsn=...) BEFORE creating the FastAPI app.
+         - Pipeline and agent read SENTRY_DSN from app.config.Settings (pipeline) or their own config (agent).
+         - Watchdog reads SENTRY_DSN from os.environ directly (no app/ imports).
+         - When DSN is None/empty, sentry_sdk.init() is a no-op — this is fine for tests.
+
+      6. TEST IMPROVEMENTS:
+         - Improve tests/conftest.py: the existing fixture sets DATABASE_URL and SENTRY_DSN env vars. Keep this. Add any new fixtures needed.
+         - Add tests for the three service entry points:
+           tests/unit/test_app_main.py: test that the FastAPI app has a /health route, test health endpoint returns 200 with {"status": "ok"}
+           tests/unit/test_agent_main.py: same health check test for agent
+           tests/unit/test_watchdog_main.py: same health check test for watchdog
+         - Use httpx.AsyncClient with the FastAPI test client pattern (from httpx import AsyncClient; async with AsyncClient(app=app, base_url="http://test") as client).
+         - Existing tests (test_config.py, test_models.py, test_logging.py, test_job_queue.py, test_db.py) should continue passing.
+
+      7. ENVIRONMENT REFERENCE:
+         - .env.example at project root listing every environment variable with comments indicating required vs optional and what each does. Group by category (Database, Sentry, GHL, Enrichment, Compliance, Agent, Alerts).
+    </what>
+    <why>
+      Completes M1 by adding the runnable service layer, deployment configuration, CI pipeline, and test coverage. After this, all three services can be deployed to Railway with health checks, every push triggers CI, and the project has a solid test foundation for all subsequent milestones.
+    </why>
+  </scope>
+
+  <context>
+    <files>
+      - Existing config: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/app/config.py
+      - Existing DB engine: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/app/db.py
+      - Existing logging: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/app/logging.py
+      - Existing models init: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/app/models/__init__.py
+      - Existing conftest: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/tests/conftest.py
+      - pyproject.toml: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/pyproject.toml
+      - AGENTS.md: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC/AGENTS.md
+    </files>
+    <patterns>
+      - P-001: All functions under 50 lines with docstrings (C-01)
+      - P-004: structlog JSON logging, never print() or stdlib logging
+      - P-010: One AsyncSession per request/job
+      - P-011: pydantic-settings fail fast on missing required vars
+      - P-013: Watchdog zero-import isolation — ZERO imports from app/ or agent/ (C-07)
+      - P-016: Sentry init at top of all three entry points before any app code
+      - P-018: GET /health returning {"status": "ok"} on all three services
+    </patterns>
+    <constraints>
+      - Python 3.12+ only (C-14)
+      - Railway deployment (C-04) — Procfile + railway.toml
+      - Watchdog must NOT import from app/ or agent/ (C-07)
+      - Working directory: /Users/kennygeiler/Documents/Vibing Coding Projects 2026/UCC
+    </constraints>
+    <existing>
+      app/config.py — Settings class with DATABASE_URL (required), SENTRY_DSN (required), plus ~15 optional API keys. Uses pydantic-settings BaseSettings with env_file=".env".
+
+      app/db.py — get_engine() returns AsyncEngine (lru_cached), get_async_session_factory() returns async_sessionmaker, get_session() is an async context manager, dispose_engine() for shutdown. Uses _make_url() to convert postgres:// to postgresql+asyncpg://.
+
+      app/logging.py — configure_logging() sets up structlog with JSON output. get_logger(component) returns a bound logger.
+
+      app/models/__init__.py — re-exports all 13 model classes from filing.py, lead.py, mca_alias.py, dnc.py, job.py, operations.py.
+
+      tests/conftest.py — autouse fixture set_test_env that monkeypatches DATABASE_URL and SENTRY_DSN, clears lru_cache on db factories.
+
+      pyproject.toml — dependencies include fastapi, uvicorn, sqlalchemy[asyncio], asyncpg, alembic, pydantic-settings, structlog, sentry-sdk, apscheduler, httpx. Dev deps: pytest, pytest-asyncio, pytest-cov. asyncio_mode = "auto".
+
+      Package __init__.py files exist for: app/, app/models/, app/services/, agent/, watchdog/, tests/, tests/unit/, tests/integration/.
+    </existing>
+  </context>
+
+  <acceptance_criteria>
+    1. app/main.py creates a FastAPI app with Sentry init, structlog config, lifespan shutdown, and /health endpoint
+    2. agent/main.py creates a FastAPI app with Sentry init and /health endpoint (stub — no agent logic)
+    3. watchdog/main.py creates a FastAPI app with Sentry init and /health endpoint, with ZERO imports from app/ or agent/
+    4. All three /health endpoints return HTTP 200 with {"status": "ok"}
+    5. Procfile defines web, agent, and watchdog service entries with uvicorn commands
+    6. railway.toml defines restart policies (on-failure for pipeline+agent, always for watchdog) and healthcheckPath: /health
+    7. .github/workflows/ci.yml runs pytest on push and PR to main using Python 3.12
+    8. sentry_sdk.init() called in all three entry points before FastAPI app creation
+    9. .env.example lists all environment variables with descriptions grouped by category
+    10. All existing tests pass (test_config, test_models, test_logging, test_job_queue, test_db)
+    11. New tests for /health on all three services pass
+    12. No function exceeds 50 lines; every module has a docstring
+    13. watchdog/main.py contains no import statements referencing app. or agent.
+  </acceptance_criteria>
+
+  <test_requirements>
+    - Health endpoints: each service's /health returns 200 with {"status": "ok"} (use httpx AsyncClient with FastAPI test pattern)
+    - Watchdog isolation: verify watchdog/main.py has no imports from app/ or agent/ (can be a static check reading the file or an AST-based test)
+    - Sentry initialization: verify sentry_sdk.init is called (mock sentry_sdk.init in tests, check it was called)
+    - All existing unit tests continue to pass unchanged
+    - CI workflow file is valid YAML with correct trigger events and Python version
+  </test_requirements>
+</assignment>

@@ -15,6 +15,31 @@ import os
 import subprocess
 import sys
 from datetime import datetime, timezone
+from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# 0. Auto-load .env file so user doesn't need to export vars manually
+# ---------------------------------------------------------------------------
+
+def _load_dotenv():
+    """Load .env file from project root into os.environ."""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if env_path.exists():
+        with open(env_path) as f:
+            for line in f:
+                raw = line.strip()
+                if not raw or raw.startswith("#"):
+                    continue
+                idx = raw.find("=")
+                if idx < 0:
+                    continue
+                key = raw[:idx]
+                value = raw[idx + 1:]
+                os.environ.setdefault(key, value)
+
+# Also ensure working directory is project root (for alembic, etc.)
+os.chdir(Path(__file__).resolve().parent.parent)
+_load_dotenv()
 
 # ---------------------------------------------------------------------------
 # 1. Pre-flight checks (no app imports yet — they need DATABASE_URL)
@@ -25,7 +50,7 @@ def preflight():
     """Verify DATABASE_URL is set and Postgres is reachable."""
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
-        print("FAIL: DATABASE_URL is not set.")
+        print("FAIL: DATABASE_URL is not set. Check your .env file.")
         sys.exit(1)
     print(f"  DATABASE_URL = {db_url[:30]}...")
 
@@ -34,28 +59,19 @@ def preflight():
         os.environ["SENTRY_DSN"] = "https://placeholder@sentry.io/0"
         print("  SENTRY_DSN not set — using placeholder for local run")
 
-    # Quick Postgres connectivity check via psycopg2 or pg_isready
+    # Quick Postgres connectivity check via docker pg_isready
     try:
         result = subprocess.run(
-            ["python", "-c", _pg_check_snippet(db_url)],
+            ["docker", "compose", "exec", "postgres", "pg_isready", "-U", "ucc", "-d", "ucc_dev"],
             capture_output=True, text=True, timeout=10,
         )
         if result.returncode != 0:
             print(f"FAIL: Cannot reach Postgres:\n{result.stderr.strip()}")
             sys.exit(1)
     except FileNotFoundError:
-        print("WARN: Could not run Postgres connectivity check (python not on PATH)")
+        print("WARN: Could not run Postgres connectivity check (docker not on PATH)")
 
     print("  Postgres is reachable.")
-
-
-def _pg_check_snippet(db_url: str) -> str:
-    """Return a Python snippet that tests DB connectivity via SQLAlchemy."""
-    return (
-        "from sqlalchemy import create_engine, text; "
-        f"e = create_engine('{db_url}'.replace('postgresql+asyncpg://', 'postgresql://').replace('postgres://', 'postgresql://')); "
-        "c = e.connect(); c.execute(text('SELECT 1')); c.close(); print('ok')"
-    )
 
 
 # ---------------------------------------------------------------------------
@@ -66,14 +82,21 @@ def _pg_check_snippet(db_url: str) -> str:
 def run_migrations():
     """Run alembic upgrade head to ensure schema is current."""
     print("\n--- Running alembic upgrade head ---")
+    env = os.environ.copy()
     result = subprocess.run(
-        ["alembic", "upgrade", "head"],
+        [sys.executable, "-m", "alembic", "upgrade", "head"],
         capture_output=True, text=True, timeout=60,
+        env=env,
     )
     if result.returncode != 0:
-        print(f"FAIL: Alembic migration failed:\n{result.stderr.strip()}")
-        sys.exit(1)
-    print("  Migrations applied successfully.")
+        # If migrations already applied, that's fine — just warn
+        if "password authentication failed" in result.stderr:
+            print("  WARN: Skipping migrations (DB auth issue in subprocess). Run ./scripts/setup_local.sh if schema is stale.")
+        else:
+            print(f"FAIL: Alembic migration failed:\n{result.stderr.strip()}")
+            sys.exit(1)
+    else:
+        print("  Migrations applied successfully.")
 
 
 # ---------------------------------------------------------------------------

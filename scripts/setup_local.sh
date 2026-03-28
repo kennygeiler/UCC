@@ -4,7 +4,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-DATABASE_URL="postgresql+asyncpg://ucc:ucc_local@localhost:5432/ucc_dev"
+export DATABASE_URL="postgresql+asyncpg://ucc:ucc_local@localhost:5432/ucc_dev"
 
 echo "==> Starting Postgres via docker-compose..."
 docker compose up -d postgres
@@ -33,13 +33,13 @@ else
 fi
 
 echo "==> Installing project in editable mode with dev extras..."
-pip install -e '.[dev]'
+python3.12 -m pip install -e '.[dev]'
 
 echo "==> Running Alembic migrations..."
-alembic upgrade head
+python3.12 -m alembic upgrade head
 
 echo "==> Seeding MCA aliases..."
-python -c "
+python3.12 -c "
 import asyncio
 from sqlalchemy import select
 from app.db import get_session
