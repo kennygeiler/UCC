@@ -2,10 +2,14 @@
 
 Extends BaseScraper to use Playwright instead of httpx for states
 that require JavaScript execution to render search results.
-Actual Playwright scraper implementations are a future concern.
 """
 
+from playwright.async_api import async_playwright
+
 from app.scrapers.base import BaseScraper
+from app.logging import get_logger
+
+logger = get_logger("playwright_scraper")
 
 
 class PlaywrightBaseScraper(BaseScraper):
@@ -15,16 +19,48 @@ class PlaywrightBaseScraper(BaseScraper):
     Subclasses still implement parse_response, build_search_url, etc.
     """
 
+    # Subclasses can override to wait for a specific selector before extracting HTML
+    wait_for_selector: str | None = None
+    # Max time in ms to wait for page load / selector
+    page_timeout: int = 30_000
+
     async def _fetch(self) -> str:
-        """Fetch HTML using Playwright headless browser.
+        """Fetch HTML using Playwright headless Chromium.
+
+        Navigates to the search URL, waits for JS rendering,
+        and returns the fully rendered DOM as HTML.
 
         Returns:
             Rendered HTML content after JavaScript execution.
-
-        Raises:
-            NotImplementedError: Playwright integration pending M10.
         """
-        raise NotImplementedError(
-            "Playwright scraper support is stubbed for future implementation. "
-            "Use httpx-based scrapers for Tier 1-3 states."
+        await self.rate_limiter.wait(self.state_code, tier=self.tier)
+        url = self.build_search_url()
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(headless=True)
+            context = await browser.new_context(
+                user_agent=(
+                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    "AppleWebKit/537.36 (KHTML, like Gecko) "
+                    "Chrome/125.0.0.0 Safari/537.36"
+                ),
+                viewport={"width": 1920, "height": 1080},
+            )
+            page = await context.new_page()
+            try:
+                await page.goto(url, wait_until="networkidle", timeout=self.page_timeout)
+                if self.wait_for_selector:
+                    await page.wait_for_selector(
+                        self.wait_for_selector, timeout=self.page_timeout
+                    )
+                html = await page.content()
+            finally:
+                await browser.close()
+
+        self.rate_limiter.record_success(self.state_code)
+        logger.info(
+            "playwright_fetch_complete",
+            state=self.state_code,
+            url=url,
         )
+        return html

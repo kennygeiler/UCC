@@ -1,11 +1,26 @@
-"""California SOS UCC filing scraper."""
+"""California SOS UCC filing scraper.
 
-from app.scrapers.base import BaseScraper
+The CA SOS portal (bizfileonline.sos.ca.gov) is behind an Imperva Incapsula
+WAF and renders search results via JavaScript. This scraper uses Playwright
+to bypass the WAF challenge and render the JS-driven page.
+
+California also offers an official UCC XML API at calicodev.sos.ca.gov
+which is the recommended long-term approach (requires a free API key).
+"""
+
+from app.scrapers.playwright_base import PlaywrightBaseScraper
 from app.scrapers.parsers import parse_html_table, rows_to_filing_dicts
 
 
-class CaliforniaScraper(BaseScraper):
-    """Scraper for California Secretary of State UCC filings."""
+class CaliforniaScraper(PlaywrightBaseScraper):
+    """Scraper for California Secretary of State UCC filings.
+
+    Uses Playwright to handle the Incapsula WAF and JS rendering.
+    Falls back to HTML table parsing once the page is fully rendered.
+    """
+
+    wait_for_selector = "table"
+    page_timeout = 45_000
 
     @property
     def state_code(self) -> str:
@@ -41,7 +56,7 @@ class CaliforniaScraper(BaseScraper):
         """Parse California SOS HTML into filing dicts.
 
         Args:
-            html: Raw HTML from the California SOS portal.
+            html: Rendered HTML from the California SOS portal.
 
         Returns:
             List of filing dicts matching UCCFiling columns.
