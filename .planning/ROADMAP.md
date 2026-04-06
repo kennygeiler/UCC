@@ -31,7 +31,11 @@ v1 delivery follows the Kiln master-plan dependency chain: platform and data fou
   3. Against one Postgres instance, `alembic upgrade head` creates or migrates every table the three services use; async sessions support all ORM modules; concurrent workers claim/complete jobs without duplicate processing (tests or equivalent documented pattern).
   4. Each service exposes a health endpoint suitable for Railway; unhealthy states are distinguishable from healthy in responses or documented status fields.
   5. Meaningful state transitions emit structured JSON logs with `component`, `status`, `error_type`, and `context`; Sentry is initialized on all three entrypoints so exceptions are attributable per service and environment.
-**Plans**: TBD
+**Plans:** 3 plans
+Plans:
+- [ ] `01-PLAN.md` — README + AGENTS pointer; CI Postgres; **[BLOCKING]** `alembic upgrade head` before pytest (PLAT-01, PLAT-03, PLAT-04)
+- [ ] `02-PLAN.md` — Integration tests: DB session smoke, job queue concurrency; app/agent structured log field tests (PLAT-03, PLAT-05, PLAT-07)
+- [ ] `03-PLAN.md` — Watchdog structlog (C-07); health JSON enrichment; Settings-backed Sentry for app/agent + tests for all three entrypoints (PLAT-02, PLAT-06, PLAT-07, PLAT-08)
 
 ### Phase 2: Scraper engine
 **Goal**: Public UCC data is ingested on a tiered, rate-respecting schedule with auditable runs and maintainable parsing.
