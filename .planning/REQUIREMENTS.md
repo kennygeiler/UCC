@@ -124,14 +124,81 @@ Deferred enhancements (not in current v1 roadmap):
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| — | — | Roadmap pending |
+| PLAT-01 | 1 | Pending |
+| PLAT-02 | 1 | Pending |
+| PLAT-03 | 1 | Pending |
+| PLAT-04 | 1 | Pending |
+| PLAT-05 | 1 | Pending |
+| PLAT-06 | 1 | Pending |
+| PLAT-07 | 1 | Pending |
+| PLAT-08 | 1 | Pending |
+| SCRAPE-01 | 2 | Pending |
+| SCRAPE-02 | 2 | Pending |
+| SCRAPE-03 | 2 | Pending |
+| SCRAPE-04 | 2 | Pending |
+| SCRAPE-05 | 2 | Pending |
+| SCRAPE-06 | 2 | Pending |
+| MCA-01 | 3 | Pending |
+| MCA-02 | 3 | Pending |
+| MCA-03 | 3 | Pending |
+| MCA-04 | 3 | Pending |
+| MCA-05 | 3 | Pending |
+| ENRICH-01 | 4 | Pending |
+| ENRICH-02 | 4 | Pending |
+| ENRICH-03 | 4 | Pending |
+| ENRICH-04 | 4 | Pending |
+| ENRICH-05 | 4 | Pending |
+| ENRICH-06 | 4 | Pending |
+| COMPLY-01 | 5 | Pending |
+| COMPLY-02 | 5 | Pending |
+| COMPLY-03 | 5 | Pending |
+| COMPLY-04 | 5 | Pending |
+| COMPLY-05 | 5 | Pending |
+| COMPLY-06 | 5 | Pending |
+| COMPLY-07 | 5 | Pending |
+| EXPORT-01 | 6 | Pending |
+| EXPORT-02 | 6 | Pending |
+| EXPORT-03 | 6 | Pending |
+| EXPORT-04 | 6 | Pending |
+| EXPORT-05 | 6 | Pending |
+| EXPORT-06 | 6 | Pending |
+| EXPORT-07 | 6 | Pending |
+| EXPORT-08 | 6 | Pending |
+| DASH-01 | 7 | Pending |
+| DASH-02 | 7 | Pending |
+| DASH-03 | 7 | Pending |
+| DASH-04 | 7 | Pending |
+| DASH-05 | 7 | Pending |
+| DASH-06 | 7 | Pending |
+| AGENT-01 | 8 | Pending |
+| AGENT-02 | 8 | Pending |
+| AGENT-03 | 8 | Pending |
+| AGENT-04 | 8 | Pending |
+| AGENT-05 | 8 | Pending |
+| AGENT-06 | 8 | Pending |
+| AGENT-07 | 8 | Pending |
+| AGENT-08 | 8 | Pending |
+| WATCH-01 | 9 | Pending |
+| WATCH-02 | 9 | Pending |
+| WATCH-03 | 9 | Pending |
+| WATCH-04 | 9 | Pending |
+| WATCH-05 | 9 | Pending |
+| WATCH-06 | 9 | Pending |
+| E2E-01 | 10 | Pending |
+| E2E-02 | 10 | Pending |
+| E2E-03 | 10 | Pending |
+| E2E-04 | 10 | Pending |
+| E2E-05 | 10 | Pending |
+| E2E-06 | 10 | Pending |
+| E2E-07 | 10 | Pending |
+| E2E-08 | 10 | Pending |
 
 **Coverage:**
 
 - v1 requirements: 68 total  
-- Mapped to phases: 0  
-- Unmapped: 68 (roadmapper will reconcile)
+- Mapped to phases: 68  
+- Unmapped: 0  
 
 ---
 *Requirements defined: 2026-04-06*  
-*Last updated: 2026-04-06 after initialization*
+*Last updated: 2026-04-06 — roadmap traceability (10 phases, 1:1 REQ → phase)*
