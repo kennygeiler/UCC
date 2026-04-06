@@ -47,7 +47,7 @@ Plans:
   3. Tier 2 and Tier 3 coverage meets master-plan breadth targets, evidenced by tests and/or smokes as specified there.
   4. Scheduled scrape jobs execute on tier-appropriate cadence (observable via scheduler integration or operational logs).
   5. Parsing normalizes SOS HTML within C-01 maintainability limits; each state scraper has a documented smoke on the scheduled profile (not necessarily every PR).
-**Plans**: TBD
+**Plans**: `.planning/phases/02-scraper-engine/01-PLAN.md` (scheduler, markers, CI, Tier 4 stubs), `02-PLAN.md` (DB integration), `03-PLAN.md` (Tier 2/3 tests, smokes, scheduled workflow), `04-PLAN.md` (Playwright consolidation, parsers/C-01, ViewState/ADR)
 
 ### Phase 3: MCA detection & scoring
 **Goal**: Filings are reliably classified and scored into MCA signal tiers with identities ready for deduplication.
