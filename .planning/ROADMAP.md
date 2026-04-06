@@ -59,7 +59,7 @@ Plans:
   3. Pipeline persists scored leads with canonical debtor identity fields suitable for cross-state dedup (C-10).
   4. A nightly alias updater job runs safely (no destructive surprises) and can be verified to broaden or refresh alias coverage over time.
   5. Unit tests cover matcher and scorer edge cases described in master-plan acceptance language.
-**Plans**: TBD
+**Plans**: `.planning/phases/03-mca-detection-scoring/01-PLAN.md` (scorer state filter + async scorer/detector tests), `02-PLAN.md` (fuzzy alias / rapidfuzz + tests), `03-PLAN.md` (Lead canonical fields, filing-scoped idempotency, tier persistence, pipeline integration), `04-PLAN.md` (nightly alias job in scheduler, idempotency, logging, integration tests)
 
 ### Phase 4: Enrichment
 **Goal**: Leads gain external attributes through an ordered, resilient enrichment path with halt semantics that protect downstream export.
