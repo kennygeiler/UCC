@@ -48,7 +48,7 @@ Fix **MCA-02** correctness: `count_positions(debtor_name, state)` must filter `U
 | MCA-02 | 01, 03 | Count filter here; tier persisted on `Lead` in 03. |
 | MCA-03 | 03 | Canonical fields + pipeline idempotency. |
 | MCA-04 | 04 | Scheduled alias updater. |
-| MCA-05 | 01, 02, 04 | Unit/async here; fuzzy in 02; scheduler/updater in 04. |
+| MCA-05 | 01, 02, 03, 04 | Unit/async here; fuzzy in 02; pipeline integration in 03; scheduler/updater in 04. |
 
 ---
 
@@ -65,12 +65,13 @@ Fix **MCA-02** correctness: `count_positions(debtor_name, state)` must filter `U
 
 ## Wave 1 — Async tests for `score_lead`
 
-**Goal:** MCA-05 coverage for DB-backed scoring path.
+**Goal:** MCA-02 + MCA-05 coverage for DB-backed scoring path (position count, **recency**, **collateral** in `lead_score`; tier from `assign_tier` / position count only, per current `scorer.py`).
 
 | Task | Acceptance criteria | Verification |
 |------|---------------------|--------------|
 | **1.1** Add async test(s) for `score_lead` that assert returned `mca_position_count`, `tier`, and `lead_score` match `compute_score` / `assign_tier` for seeded `UCCFiling` rows (**integration** marker if Postgres required; align with `tests/conftest.py` patterns). | At least one test exercises `await score_lead(...)`. | `pytest tests/unit/test_scorer.py -m integration -x -q` **or** `pytest tests/integration/... -x -q` if placed in integration package |
-| **1.2** If project standard keeps scorer tests in `tests/unit/`, use the same DB fixture strategy as other async integration tests (grep `pytest.mark.integration` in repo). | No hanging sessions; uses `get_session` / engine from conftest. | `pytest tests/ -k score_lead --maxfail=1 -q` |
+| **1.2** Add focused assertions that **`lead_score`** changes with **`filing_date`** (recent vs stale, same position count) and with **`has_mca_collateral`** true vs false, matching `calculate_recency_boost` / `compute_score`; tier unchanged when only recency/collateral toggles (same positions). | Documents MCA-02 scoring signals beyond raw counts. | `pytest tests/ -k "score_lead" --maxfail=1 -q` |
+| **1.3** If project standard keeps scorer tests in `tests/unit/`, use the same DB fixture strategy as other async integration tests (grep `pytest.mark.integration` in repo). | No hanging sessions; uses `get_session` / engine from conftest. | `pytest tests/ -k score_lead --maxfail=1 -q` |
 
 ---
 

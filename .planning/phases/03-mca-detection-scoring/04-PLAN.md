@@ -51,7 +51,7 @@ Implement **MCA-04**: register a **nightly** (or interval-driven) APScheduler jo
 | MCA-02 | 01, 03 | — |
 | MCA-03 | 03 | — |
 | MCA-04 | 04 | Primary delivery. |
-| MCA-05 | 04 | Scheduler + updater integration tests. |
+| MCA-05 | 01, 02, 03, 04 | Scheduler + updater integration tests here; see 01–03 for matcher/scorer/pipeline tests. |
 
 ---
 
@@ -73,7 +73,7 @@ Implement **MCA-04**: register a **nightly** (or interval-driven) APScheduler jo
 | Task | Acceptance criteria | Verification |
 |------|---------------------|--------------|
 | **1.1** In `app/scrapers/scheduler.py` `create_scheduler()`, if `MCA_ALIAS_UPDATE_ENABLED`, `add_job` with stable `id` (e.g. `mca_alias_update`), `IntervalTrigger(hours=...)`, `replace_existing=True`, concurrency controls as in Security table. | `get_jobs()` contains alias job. | `pytest tests/unit/test_scheduler.py -x -q` |
-| **1.2** Ensure `app/main.py` lifespan still starts one shared scheduler (no second scheduler instance). | Single `create_scheduler()` used. | Grep `create_scheduler` |
+| **1.2** Ensure `app/main.py` lifespan still starts one shared scheduler (no second scheduler instance). | Single `create_scheduler()` used. | `rg -n "create_scheduler" app/main.py app/scrapers/scheduler.py` |
 
 ---
 

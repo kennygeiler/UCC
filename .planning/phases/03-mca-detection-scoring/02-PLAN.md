@@ -50,7 +50,7 @@ Implement **MCA-01** fuzzy matching against normalized `mca_aliases` keys **afte
 | MCA-02 | 01, 03 | — |
 | MCA-03 | 03 | — |
 | MCA-04 | 04 | — |
-| MCA-05 | 02 | Fuzzy-specific tests here. |
+| MCA-05 | 01, 02, 03, 04 | Fuzzy-specific tests here; see 01/03/04 for other MCA-05 coverage. |
 
 ---
 
@@ -83,7 +83,7 @@ Implement **MCA-01** fuzzy matching against normalized `mca_aliases` keys **afte
 | Task | Acceptance criteria | Verification |
 |------|---------------------|--------------|
 | **2.1** Tests: fuzzy match above cutoff; below cutoff returns false MCA via alias path (shell/collateral may still match—assert isolated cases); exact match still wins over fuzzy. | Clear test names. | `pytest tests/unit/test_detector.py -x -q` |
-| **2.2** Add short comment block (≤10 lines) in `detector.py` or `03-RESEARCH.md` reference in docstring: fuzzy is O(n) over aliases; acceptable for expected table size; if n > threshold, revisit indexing/batch. | N/A | Human review in PR |
+| **2.2** Add short comment block (≤10 lines) in `detector.py` or `03-RESEARCH.md` reference in docstring: fuzzy is O(n) over aliases; acceptable for expected table size; if n > threshold, revisit indexing/batch. | Comment present; docstring or module header cites complexity. | `rg -n -F "O(n)" app/mca/detector.py` **and** `ruff check app/mca/detector.py` **and** `pytest tests/unit/test_detector.py -k fuzzy -q` |
 
 ---
 

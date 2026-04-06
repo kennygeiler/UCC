@@ -6,7 +6,7 @@ status: draft
 wave_count: 3
 created: 2026-04-06
 title: Lead canonical debtor fields, filing-scoped pipeline idempotency, tier persistence
-requirements: [MCA-02, MCA-03]
+requirements: [MCA-02, MCA-03, MCA-05]
 depends_on_plans: [01]
 files_touch_estimate:
   - app/models/lead.py
@@ -51,7 +51,7 @@ Satisfy **MCA-03** and **C-10** hooks: persist **canonical/normalized debtor ide
 | MCA-02 | 01, 03 | Tier column + correct counts. |
 | MCA-03 | 03 | Primary delivery. |
 | MCA-04 | 04 | — |
-| MCA-05 | 03 | Pipeline integration tests. |
+| MCA-05 | 01, 02, 03, 04 | Unit/async (01–02), pipeline integration (03), scheduler/updater (04). |
 
 ---
 
@@ -62,7 +62,7 @@ Satisfy **MCA-03** and **C-10** hooks: persist **canonical/normalized debtor ide
 | Task | Acceptance criteria | Verification |
 |------|---------------------|--------------|
 | **0.1** New revision: add `leads.debtor_name_normalized` (Text, NOT NULL default `''` **or** nullable with backfill in migration—prefer NOT NULL after backfill), `leads.source_filing_id` (Integer FK → `ucc_filings.id`, nullable, **UniqueConstraint**), `leads.mca_tier` (Text, nullable with backfill from score if possible **or** nullable until new rows only—executor chooses simplest consistent approach). | `alembic upgrade head` on clean DB succeeds. | `alembic upgrade head` |
-| **0.2** Create index on `debtor_name_normalized` if dedup phase will query it (recommended). | Index exists in migration. | Inspect migration file |
+| **0.2** Create index on `debtor_name_normalized` if dedup phase will query it (recommended). | Index exists in migration. | `rg -n "debtor_name_normalized|ix_.*debtor" migrations/versions/*.py` |
 
 ---
 
@@ -72,7 +72,7 @@ Satisfy **MCA-03** and **C-10** hooks: persist **canonical/normalized debtor ide
 
 | Task | Acceptance criteria | Verification |
 |------|---------------------|--------------|
-| **1.1** Update `app/models/lead.py` with new columns; update `process_filing` to set `debtor_name_normalized`, `source_filing_id=filing.id`, `mca_tier=scoring["tier"]`. | Model matches DB. | `pytest tests/ -k lead --maxfail=1 -q` (adjust) |
+| **1.1** Update `app/models/lead.py` with new columns; update `process_filing` to set `debtor_name_normalized`, `source_filing_id=filing.id`, `mca_tier=scoring["tier"]`. | Model matches DB. | `pytest tests/ -k lead --maxfail=1 -q` |
 | **1.2** Rewrite `get_unprocessed_filings`: select filings where **no** lead exists with `Lead.source_filing_id == UCCFiling.id` (prefer `NOT EXISTS` or `outerjoin` on **filing id**, not debtor name). | Two states same debtor: both filings eligible. | Integration test in Wave 2 |
 | **1.3** Idempotency: if lead already exists for `filing.id`, return existing or no-op without error (define behavior in docstring). | Second `process_filing` does not insert duplicate. | Integration test |
 
