@@ -83,7 +83,7 @@ Plans:
   3. DataMerch runs with documented fallback when the API key is absent; operators see warnings, not silent pass (C-15).
   4. DNC.com/CCC and Blacklist Alliance layers persist pass/fail to `compliance_checks` with structured logs suitable for audit without exposing secrets.
   5. Static analysis and/or tests prove no export path skips the gate; negative tests cover known DNC and litigator scenarios per M10 language.
-**Plans**: TBD
+**Plans**: `.planning/phases/05-compliance-gate/01-PLAN.md` (layer order, `ComplianceCheck` rows, Lead session persistence), `02-PLAN.md` (internal DNC C-12 append-only + reversal audit), `03-PLAN.md` (DataMerch C-15 semantics + audit-safe structured logs), `04-PLAN.md` (export adapter compliance guard + negative tests, COMPLY-05/06)
 
 ### Phase 6: Dedup, export & GHL
 **Goal**: Compliant leads deduplicate across states and reach GoHighLevel (or CSV fallback) only through the adapter abstraction, with recycling and verified integrations.
