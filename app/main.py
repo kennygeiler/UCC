@@ -8,6 +8,7 @@ from contextlib import asynccontextmanager
 
 import sentry_sdk
 from fastapi import FastAPI
+from fastapi.responses import RedirectResponse
 from sqlalchemy import text
 
 from app.config import Settings
@@ -17,7 +18,8 @@ from app.scrapers.scheduler import create_scheduler
 
 settings = Settings()
 
-sentry_sdk.init(dsn=settings.SENTRY_DSN, send_default_pii=False)
+if settings.SENTRY_DSN:
+    sentry_sdk.init(dsn=settings.SENTRY_DSN, send_default_pii=False)
 
 configure_logging()
 
@@ -46,6 +48,12 @@ from app.export.webhook import router as webhook_router
 
 app.include_router(dashboard_router)
 app.include_router(webhook_router)
+
+
+@app.get("/")
+async def root():
+    """Root URL — browsers default here; send them to the manager dashboard."""
+    return RedirectResponse(url="/dashboard/", status_code=307)
 
 
 @app.get("/health")

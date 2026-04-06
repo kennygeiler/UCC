@@ -5,6 +5,7 @@ from datetime import datetime, timedelta, timezone
 from sqlalchemy import func, select
 
 from app.db import get_session
+from app.models.filing import UCCFiling
 from app.models.lead import Lead
 from app.models.operations import PipelineEvent, ScraperRun
 
@@ -22,13 +23,48 @@ async def get_dashboard_stats() -> dict:
         exported = await _count_where(session, Lead, Lead.export_status == "exported")
         blocked = await _count_where(session, Lead, Lead.compliance_status.like("blocked:%"))
 
+    state_coverage = await get_state_filing_lead_stats()
+
     return {
         "total_leads": total,
         "enriched_leads": enriched,
         "cleared_leads": cleared,
         "exported_leads": exported,
         "blocked_leads": blocked,
+        "state_coverage": state_coverage,
     }
+
+
+async def get_state_filing_lead_stats() -> list[dict]:
+    """Per state: stored UCC filing count, lead count, and whether a scraper run occurred.
+
+    Filings are rows in ``ucc_filings`` (cumulative ingested). Leads are rows in
+    ``leads`` for that state. States appear if they have filings, leads, or any
+    ``scraper_runs`` row.
+    """
+    async with get_session() as session:
+        filing_rows = await session.execute(
+            select(UCCFiling.state, func.count(UCCFiling.id)).group_by(UCCFiling.state)
+        )
+        lead_rows = await session.execute(
+            select(Lead.state, func.count(Lead.id)).group_by(Lead.state)
+        )
+        run_states_result = await session.execute(select(ScraperRun.state).distinct())
+
+    filings_by_state = {row[0]: int(row[1]) for row in filing_rows.all()}
+    leads_by_state = {row[0]: int(row[1]) for row in lead_rows.all()}
+    scraper_states = {row[0] for row in run_states_result.all()}
+
+    all_states = sorted(set(filings_by_state) | set(leads_by_state) | scraper_states)
+    return [
+        {
+            "state": code,
+            "filings": filings_by_state.get(code, 0),
+            "leads": leads_by_state.get(code, 0),
+            "scraper_run": code in scraper_states,
+        }
+        for code in all_states
+    ]
 
 
 async def get_scraper_status() -> list[dict]:

@@ -1,0 +1,101 @@
+<dialog id="pipeline-explainer" class="max-w-3xl w-full max-h-[90vh] rounded-xl shadow-2xl border border-gray-200 p-0 backdrop:bg-black/40">
+    <div class="flex max-h-[90vh] flex-col bg-white rounded-xl">
+        <div class="flex shrink-0 items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
+            <div>
+                <h2 class="text-xl font-semibold text-gray-900">How the UCC pipeline works</h2>
+                <p class="mt-1 text-sm text-gray-500">For demos: scrapers → filings → MCA leads → enrichment → compliance → export</p>
+            </div>
+            <button type="button" onclick="document.getElementById('pipeline-explainer').close()"
+                class="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100">
+                Close
+            </button>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto px-6 py-4 text-sm text-gray-800 space-y-6">
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-2">How scrapers work</h3>
+                <ul class="list-disc pl-5 space-y-1 text-gray-700">
+                    <li>Each U.S. state (where implemented) has its own scraper: simple states use <strong class="font-medium">HTTP</strong>; harder portals (e.g. California behind a WAF) use <strong class="font-medium">Playwright</strong>.</li>
+                    <li>The <strong class="font-medium">scheduler</strong> (when enabled on the pipeline service) runs jobs on a <strong>tier-based interval</strong> (e.g. Tier 1 about daily, Tier 2/3 less often).</li>
+                    <li>Raw rows land in Postgres as <code class="rounded bg-gray-100 px-1 text-xs">ucc_filings</code>. Inserts are <strong class="font-medium">deduplicated</strong> by <code class="rounded bg-gray-100 px-1 text-xs">state</code> + <code class="rounded bg-gray-100 px-1 text-xs">filing_number</code> so re-scrapes do not duplicate the same filing.</li>
+                    <li><strong class="font-medium">California</strong> searches by a set of secured-party keywords and a <strong class="font-medium">rolling filing-date window</strong> (configurable via <code class="rounded bg-gray-100 px-1 text-xs">SCRAPER_FILING_LOOKBACK_DAYS</code> in <code class="rounded bg-gray-100 px-1 text-xs">.env</code>). Results are de-duped in-memory across search terms before save.</li>
+                </ul>
+            </section>
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-2">Pipeline steps (conceptual order)</h3>
+                <ol class="list-decimal pl-5 space-y-2 text-gray-700">
+                    <li><strong class="font-medium">Scrape</strong> — SOS portals → <code class="rounded bg-gray-100 px-1 text-xs">ucc_filings</code>.</li>
+                    <li><strong class="font-medium">MCA detection &amp; scoring</strong> — For each filing, match secured party / collateral against <code class="rounded bg-gray-100 px-1 text-xs">mca_aliases</code> and heuristics; scored rows become <code class="rounded bg-gray-100 px-1 text-xs">leads</code>.</li>
+                    <li><strong class="font-medium">Enrichment</strong> — Waterfall of vendors fills phone, email, etc.; cache + circuit breaker protect cost and stability.</li>
+                    <li><strong class="font-medium">Compliance</strong> — Four ordered gates (internal DNC, DataMerch, DNC scrub, blacklist). Fail → lead blocked; pass → <code class="rounded bg-gray-100 px-1 text-xs">cleared</code>.</li>
+                    <li><strong class="font-medium">Export</strong> — Cleared leads go to GoHighLevel or CSV via a single adapter interface.</li>
+                    <li><strong class="font-medium">Cross-state dedup</strong> (product target) — Exact + fuzzy matching before or as part of export (see roadmap).</li>
+                </ol>
+            </section>
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-3">What exists today vs what is still open</h3>
+                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="w-full text-left text-xs sm:text-sm">
+                        <thead class="bg-gray-50 text-gray-600">
+                            <tr>
+                                <th class="px-3 py-2 font-medium">Area</th>
+                                <th class="px-3 py-2 font-medium">Status</th>
+                                <th class="px-3 py-2 font-medium">Notes for peers</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr>
+                                <td class="px-3 py-2">State scrapers + scheduler</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
+                                <td class="px-3 py-2 text-gray-700">Many states implemented; tiered cadence when <code class="rounded bg-gray-100 px-1">SCRAPER_SCHEDULER_ENABLED</code> is on.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">MCA detector + scorer</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
+                                <td class="px-3 py-2 text-gray-700">Needs seeded <code class="rounded bg-gray-100 px-1">mca_aliases</code> for real hit rates; banks in search results often are not MCA.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Filing → lead automation</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">Partial</span></td>
+                                <td class="px-3 py-2 text-gray-700"><code class="rounded bg-gray-100 px-1">run_mca_pipeline</code> exists but is <strong>not</strong> hooked to the live scheduler yet—runs via E2E script or manual/script calls. So filings can grow without new leads until that runs.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Enrichment + HALT</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
+                                <td class="px-3 py-2 text-gray-700">Waterfall, cache, rolling error-rate halt; API keys in env.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Compliance gate</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
+                                <td class="px-3 py-2 text-gray-700">Four layers, audit rows, export guard on adapters, DNC reversal audit.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Export (GHL / CSV)</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
+                                <td class="px-3 py-2 text-gray-700">Adapter pattern; cleared-only export enforced in code paths.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Dashboard</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
+                                <td class="px-3 py-2 text-gray-700">This page + HTMX partials; filings/leads per state below.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Cross-state dedup</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-gray-200 px-2 py-0.5 text-gray-800">Roadmap</span></td>
+                                <td class="px-3 py-2 text-gray-700">Target in master plan (C-10); dedicated dedup module not primary in this build yet.</td>
+                            </tr>
+                            <tr>
+                                <td class="px-3 py-2">Agent / watchdog</td>
+                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">Separate services</span></td>
+                                <td class="px-3 py-2 text-gray-700">Own entrypoints; self-healing and heartbeats per architecture docs.</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <section class="rounded-lg bg-blue-50 px-4 py-3 text-blue-900">
+                <p class="font-medium">Why many filings but zero leads?</p>
+                <p class="mt-1 text-blue-800/90">Either MCA matching did not fire on those secured parties (seed aliases + heuristics), or the batch that turns filings into <code class="rounded bg-blue-100/80 px-1 text-xs">leads</code> has not been run continuously in the process you are demoing.</p>
+            </section>
+        </div>
+    </div>
+</dialog>

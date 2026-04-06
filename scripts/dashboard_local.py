@@ -27,9 +27,7 @@ from dotenv import load_dotenv
 
 load_dotenv(PROJECT_ROOT / ".env")
 
-# Ensure SENTRY_DSN has a value so Settings() won't blow up
-if not os.environ.get("SENTRY_DSN"):
-    os.environ["SENTRY_DSN"] = "https://placeholder@sentry.io/0"
+# SENTRY_DSN optional — pipeline skips Sentry init when unset
 
 # ---------------------------------------------------------------------------
 # Now safe to import app modules

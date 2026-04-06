@@ -1,7 +1,9 @@
 """Configuration module using pydantic-settings.
 
 Reads all settings from environment variables. Fails fast with a clear
-ValidationError when required variables (DATABASE_URL, SENTRY_DSN) are missing.
+ValidationError when ``DATABASE_URL`` is missing. ``SENTRY_DSN`` is optional
+so local demos can run without Sentry; production should set a real DSN
+(``https://key@oORG.ingest.sentry.io/PROJECT_ID`` with a numeric project id).
 """
 
 from pydantic_settings import BaseSettings
@@ -10,9 +12,10 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
-    # Required — app will not start without these
+    # Required — app will not start without database
     DATABASE_URL: str
-    SENTRY_DSN: str
+    # Optional locally; when unset/empty, entrypoints skip sentry_sdk.init (PLAT-08 in prod)
+    SENTRY_DSN: str | None = None
 
     # GoHighLevel integration
     GHL_API_KEY: str | None = None
@@ -41,6 +44,9 @@ class Settings(BaseSettings):
 
     # Pipeline: start APScheduler for tiered scrapes (disable in tests via env)
     SCRAPER_SCHEDULER_ENABLED: bool = True
+    # Rolling filing-date window for states that query by date (e.g. California API).
+    # Larger values backfill further; persistence still dedupes by state + filing_number.
+    SCRAPER_FILING_LOOKBACK_DAYS: int = 3
 
     # MCA detector — fuzzy alias match (after exact match; O(n) over alias rows)
     MCA_FUZZY_MIN_ALIAS_LEN: int = 5

@@ -4,7 +4,6 @@ These tests verify the function signatures and logic without a live database.
 Integration tests with a real database would go in tests/integration/.
 """
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 from datetime import datetime, timezone
 
@@ -16,7 +15,7 @@ from app.services.job_queue import enqueue, claim, complete, fail
 @pytest.mark.asyncio
 async def test_enqueue_creates_pending_job():
     """enqueue() should add a JobQueue instance with status=pending to the session."""
-    session = AsyncMock()
+    session = MagicMock()
     session.flush = AsyncMock()
 
     # Patch JobQueue so we can inspect what was created
@@ -41,7 +40,7 @@ async def test_enqueue_creates_pending_job():
 @pytest.mark.asyncio
 async def test_complete_updates_status():
     """complete() should execute an update setting status=completed."""
-    session = AsyncMock()
+    session = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
 
@@ -54,7 +53,7 @@ async def test_complete_updates_status():
 @pytest.mark.asyncio
 async def test_fail_updates_status_and_increments_retry():
     """fail() should execute an update setting status=failed and incrementing retry_count."""
-    session = AsyncMock()
+    session = MagicMock()
     session.execute = AsyncMock()
     session.flush = AsyncMock()
 

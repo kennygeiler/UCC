@@ -7,7 +7,12 @@ from fastapi import APIRouter, Request, UploadFile, File
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 
-from app.dashboard.queries import get_dashboard_stats, get_scraper_status, get_recent_alerts
+from app.dashboard.queries import (
+    get_dashboard_stats,
+    get_recent_alerts,
+    get_scraper_status,
+    get_state_filing_lead_stats,
+)
 from app.logging import get_logger
 
 logger = get_logger("dashboard")
@@ -28,6 +33,17 @@ async def scraper_status(request: Request):
     """Scraper status by state — HTMX partial."""
     scrapers = await get_scraper_status()
     return templates.TemplateResponse(request, "partials/scrapers.html", context={"scrapers": scrapers})
+
+
+@router.get("/state-coverage", response_class=HTMLResponse)
+async def state_coverage_partial(request: Request):
+    """Filings vs leads per state — HTMX partial."""
+    state_coverage = await get_state_filing_lead_stats()
+    return templates.TemplateResponse(
+        request,
+        "partials/state_coverage.html",
+        context={"state_coverage": state_coverage},
+    )
 
 
 @router.get("/leads", response_class=HTMLResponse)

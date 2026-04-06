@@ -39,11 +39,13 @@ Unit tests use mocked DB settings via `tests/conftest.py`. Integration tests (`@
 
 ## Migrations
 
-With `DATABASE_URL` set:
+`DATABASE_URL` must be set (environment **or** `.env` at the project root — Alembic loads `.env` automatically).
 
 ```bash
-alembic upgrade head
+python -m alembic upgrade head
 ```
+
+If you see **`Connection refused`** / **`errno 61`** on port **5432**, Postgres is not listening locally. Start it (example: Homebrew `brew services start postgresql@16`, or Docker), create the database/user from your DSN, then retry. For a remote DB (e.g. Railway), point `DATABASE_URL` at that host instead of `localhost`.
 
 ## CI parity
 

@@ -15,7 +15,9 @@ from watchdog.logging_config import configure_logging
 
 configure_logging()
 
-sentry_sdk.init(dsn=os.environ.get("SENTRY_DSN", ""), send_default_pii=False)
+_sentry_dsn = os.environ.get("SENTRY_DSN")
+if _sentry_dsn:
+    sentry_sdk.init(dsn=_sentry_dsn, send_default_pii=False)
 
 _monitor_started = False
 

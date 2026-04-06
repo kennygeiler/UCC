@@ -12,6 +12,7 @@ filings within a rolling date window.
 
 from datetime import datetime, timedelta, timezone
 
+from app.config import Settings
 from app.scrapers.playwright_base import PlaywrightBaseScraper
 from app.scrapers.parsers import parse_date
 from app.logging import get_logger
@@ -32,10 +33,6 @@ _SEARCH_TERMS = [
     "TOYOTA",
     "CAPITAL ONE",
 ]
-
-# How many days back from today to search.
-_LOOKBACK_DAYS = 3
-
 
 class CaliforniaScraper(PlaywrightBaseScraper):
     """Scraper for California Secretary of State UCC filings.
@@ -95,7 +92,8 @@ class CaliforniaScraper(PlaywrightBaseScraper):
         await self.rate_limiter.wait(self.state_code, tier=self.tier)
 
         today = datetime.now(timezone.utc).date()
-        start_date = today - timedelta(days=_LOOKBACK_DAYS)
+        lookback = Settings().SCRAPER_FILING_LOOKBACK_DAYS
+        start_date = today - timedelta(days=lookback)
         start_str = start_date.strftime("%m/%d/%Y")
         end_str = today.strftime("%m/%d/%Y")
 

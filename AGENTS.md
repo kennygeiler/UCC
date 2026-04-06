@@ -22,11 +22,12 @@ python -m agent.main
 # Run watchdog service
 python -m watchdog.main
 
-# Run database migrations
-alembic upgrade head
+# Run database migrations (use project venv so `alembic` is on PATH, or -m below)
+# source .venv/bin/activate   # macOS/Linux
+python -m alembic upgrade head
 
 # Generate new migration
-alembic revision --autogenerate -m "description"
+python -m alembic revision --autogenerate -m "description"
 ```
 
 ## Architecture TL;DR

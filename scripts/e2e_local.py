@@ -46,30 +46,50 @@ _load_dotenv()
 # ---------------------------------------------------------------------------
 
 
+def _database_url_for_asyncpg(url: str) -> str:
+    """Strip SQLAlchemy async driver prefix so asyncpg can use the DSN."""
+    if url.startswith("postgresql+asyncpg://"):
+        return "postgresql://" + url.removeprefix("postgresql+asyncpg://")
+    if url.startswith("postgres://"):
+        return "postgresql://" + url.removeprefix("postgres://")
+    return url
+
+
 def preflight():
-    """Verify DATABASE_URL is set and Postgres is reachable."""
+    """Verify DATABASE_URL is set and Postgres accepts connections."""
     db_url = os.environ.get("DATABASE_URL")
     if not db_url:
         print("FAIL: DATABASE_URL is not set. Check your .env file.")
         sys.exit(1)
     print(f"  DATABASE_URL = {db_url[:30]}...")
 
-    # Ensure SENTRY_DSN has a value so Settings() won't blow up
+    # Optional SENTRY_DSN; Settings() no longer requires it
     if not os.environ.get("SENTRY_DSN"):
-        os.environ["SENTRY_DSN"] = "https://placeholder@sentry.io/0"
-        print("  SENTRY_DSN not set — using placeholder for local run")
+        print("  SENTRY_DSN not set — Sentry disabled for local run")
 
-    # Quick Postgres connectivity check via docker pg_isready
+    dsn = _database_url_for_asyncpg(db_url.strip())
     try:
-        result = subprocess.run(
-            ["docker", "compose", "exec", "postgres", "pg_isready", "-U", "ucc", "-d", "ucc_dev"],
-            capture_output=True, text=True, timeout=10,
+        import asyncpg
+    except ImportError:
+        print("WARN: asyncpg not installed — skipping DB ping (run pip install -e '.[dev]')")
+        return
+
+    async def _ping() -> None:
+        conn = await asyncio.wait_for(asyncpg.connect(dsn=dsn), timeout=10.0)
+        try:
+            await conn.execute("SELECT 1")
+        finally:
+            await conn.close()
+
+    try:
+        asyncio.run(_ping())
+    except Exception as exc:
+        print(f"FAIL: Cannot reach Postgres using DATABASE_URL:\n  {exc}")
+        print(
+            "  Tip: start Postgres (Homebrew, Docker, etc.), confirm host/port/user/db in .env, "
+            "and run: python -m alembic upgrade head"
         )
-        if result.returncode != 0:
-            print(f"FAIL: Cannot reach Postgres:\n{result.stderr.strip()}")
-            sys.exit(1)
-    except FileNotFoundError:
-        print("WARN: Could not run Postgres connectivity check (docker not on PATH)")
+        sys.exit(1)
 
     print("  Postgres is reachable.")
 
@@ -148,6 +168,37 @@ async def stage_detect(state: str) -> list[dict]:
                 "filing_id": f.id,
             })
     return leads
+
+
+async def _print_mca_diagnostic(state: str) -> None:
+    """When MCA finds no leads, show alias count and sample secured-party text."""
+    from sqlalchemy import func, select
+
+    from app.db import get_session
+    from app.models.filing import UCCFiling
+    from app.models.mca_alias import MCAlias
+
+    async with get_session() as session:
+        n_aliases = await session.scalar(select(func.count()).select_from(MCAlias)) or 0
+        n_filings = await session.scalar(
+            select(func.count()).select_from(UCCFiling).where(UCCFiling.state == state)
+        ) or 0
+        sample = await session.execute(
+            select(UCCFiling.secured_party, UCCFiling.collateral_description)
+            .where(UCCFiling.state == state)
+            .limit(5)
+        )
+        rows = sample.all()
+
+    print(f"  Diagnostic: mca_aliases rows={n_aliases}, {state} filings in DB={n_filings}")
+    if not rows:
+        print("  (No filing rows for this state — scrape may have returned nothing.)")
+        return
+    print("  Sample secured_party from filings (MCA matcher uses this + collateral):")
+    for sp, coll in rows:
+        sp_disp = (sp or "(null)")[:72]
+        coll_disp = "has text" if (coll and str(coll).strip()) else "empty"
+        print(f"    {sp_disp!r} | collateral {coll_disp}")
 
 
 async def stage_score(detected_leads: list[dict]) -> list[dict]:
@@ -298,6 +349,12 @@ async def run_pipeline(state: str, dry_run: bool):
 
     if not detected:
         print("\n  No MCA leads found — pipeline complete.")
+        await _print_mca_diagnostic(state)
+        print(
+            "\n  Tip: If mca_aliases count is 0, seed from scripts/setup_local.sh\n"
+            "  (or app/mca/seed_data.py). Otherwise add aliases that match your\n"
+            "  secured_party strings, or rely on shell/collateral heuristics."
+        )
         _print_summary(summary)
         return
 

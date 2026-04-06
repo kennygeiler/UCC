@@ -17,7 +17,8 @@ from app.logging import configure_logging
 
 settings = Settings()
 
-sentry_sdk.init(dsn=settings.SENTRY_DSN, send_default_pii=False)
+if settings.SENTRY_DSN:
+    sentry_sdk.init(dsn=settings.SENTRY_DSN, send_default_pii=False)
 
 configure_logging()
 

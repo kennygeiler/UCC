@@ -9,7 +9,15 @@
 </head>
 <body class="bg-gray-50 text-gray-900">
     <div class="max-w-7xl mx-auto px-4 py-8">
-        <h1 class="text-3xl font-bold mb-8">Pipeline Dashboard</h1>
+        <div class="mb-8 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <h1 class="text-3xl font-bold">Pipeline Dashboard</h1>
+            <button type="button"
+                onclick="document.getElementById('pipeline-explainer').showModal()"
+                class="inline-flex shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50">
+                How this pipeline works
+            </button>
+        </div>
+        {% include "partials/pipeline_explainer_dialog.html" %}
 
         <!-- Stats Cards -->
         <div class="grid grid-cols-2 md:grid-cols-5 gap-4 mb-8">
@@ -32,6 +40,17 @@
             <div class="bg-white rounded-lg shadow p-4">
                 <p class="text-sm text-gray-500">Blocked (Compliance)</p>
                 <p class="text-2xl font-bold text-red-600">{{ blocked_leads }}</p>
+            </div>
+        </div>
+
+        <!-- Filings & leads by state -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-4">Filings &amp; leads by state</h2>
+            <p class="text-sm text-gray-500 mb-4">
+                Stored UCC filings in the database and lead rows per state. Includes states that have had at least one scraper run.
+            </p>
+            <div hx-get="/dashboard/state-coverage" hx-trigger="load, every 30s" hx-swap="innerHTML">
+                <p class="text-gray-400">Loading state coverage...</p>
             </div>
         </div>
 

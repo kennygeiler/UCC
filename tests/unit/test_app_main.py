@@ -9,6 +9,18 @@ from app.main import app
 
 
 @pytest.mark.asyncio
+async def test_root_redirects_to_dashboard():
+    """GET / should redirect to the dashboard (no bare 404 for casual demos)."""
+    transport = ASGITransport(app=app)
+    async with AsyncClient(
+        transport=transport, base_url="http://test", follow_redirects=False
+    ) as client:
+        response = await client.get("/")
+    assert response.status_code == 307
+    assert response.headers["location"] == "/dashboard/"
+
+
+@pytest.mark.asyncio
 async def test_health_endpoint_returns_ok():
     """Health returns 200 with status and database fields when DB is up."""
     mock_conn = AsyncMock()

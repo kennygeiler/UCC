@@ -21,8 +21,8 @@ def test_settings_raises_when_database_url_missing(monkeypatch):
         app.config.Settings(_env_file=None)
 
 
-def test_settings_raises_when_sentry_dsn_missing(monkeypatch):
-    """Settings() must raise ValidationError when SENTRY_DSN is missing."""
+def test_settings_loads_when_sentry_dsn_missing(monkeypatch):
+    """SENTRY_DSN is optional for local runs; pipeline skips Sentry init if unset."""
     monkeypatch.setenv("DATABASE_URL", "postgresql://x:x@localhost/db")
     monkeypatch.delenv("SENTRY_DSN", raising=False)
 
@@ -31,8 +31,8 @@ def test_settings_raises_when_sentry_dsn_missing(monkeypatch):
     import app.config
 
     reload(app.config)
-    with pytest.raises(ValidationError):
-        app.config.Settings(_env_file=None)
+    settings = app.config.Settings(_env_file=None)
+    assert settings.SENTRY_DSN is None
 
 
 def test_settings_loads_with_required_vars(monkeypatch):
