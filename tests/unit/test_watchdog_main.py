@@ -11,12 +11,14 @@ from watchdog.main import app
 
 @pytest.mark.asyncio
 async def test_health_endpoint_returns_ok():
-    """Health endpoint returns 200 with status ok."""
+    """Health returns 200 with status and monitor fields."""
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         response = await client.get("/health")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok"}
+    data = response.json()
+    assert data["status"] == "ok"
+    assert "monitor" in data
 
 
 def test_watchdog_has_no_app_or_agent_imports():

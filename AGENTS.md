@@ -1,5 +1,7 @@
 # AGENTS.md
 
+**First-time setup and CI parity:** see root [`README.md`](README.md) (venv, editable install, migrations, and how CI runs `alembic` + `pytest`).
+
 ## Commands
 ```bash
 # No commands available yet -- M1 has not been built.

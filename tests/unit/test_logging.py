@@ -25,11 +25,18 @@ def test_logging_produces_json_output(capsys):
     from app.logging import configure_logging, get_logger
     configure_logging()
     logger = get_logger("test_component")
-    logger.info("test message", status="ok", error_type=None, context="unit_test")
+    logger.info(
+        "test message",
+        status="ok",
+        error_type=None,
+        context={"k": "v"},
+    )
     captured = capsys.readouterr()
     # structlog with PrintLoggerFactory writes to stdout
     line = captured.out.strip()
     parsed = json.loads(line)
     assert parsed["component"] == "test_component"
     assert parsed["status"] == "ok"
+    assert parsed["error_type"] is None
+    assert parsed["context"] == {"k": "v"}
     assert "event" in parsed

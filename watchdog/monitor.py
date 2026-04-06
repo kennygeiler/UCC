@@ -143,8 +143,23 @@ async def check_lead_flow() -> bool:
 
 async def run_watchdog_loop() -> None:
     """Main watchdog loop — check heartbeat and lead flow every 5 minutes."""
+    from watchdog.logging_config import get_logger
+
+    log = get_logger("watchdog_monitor")
+    log.info(
+        "watchdog_loop_start",
+        status="ok",
+        error_type=None,
+        context={"phase": "startup"},
+    )
     while True:
         is_alive = await check_heartbeat()
+        log.info(
+            "heartbeat_check",
+            status="ok" if is_alive else "stale",
+            error_type=None,
+            context={"agent_alive": is_alive},
+        )
         if not is_alive:
             await send_alert(
                 subject="UCC Pipeline Alert: Self-Healing Agent Down",

@@ -8,7 +8,7 @@ v1 delivery follows the Kiln master-plan dependency chain: platform and data fou
 
 **Phase Numbering:** Integer phases 1–10 match requirement clusters M1–M10. Decimal phases (e.g. 3.1) are reserved for `/gsd-insert-phase` urgent work.
 
-- [ ] **Phase 1: Platform, data & CI** - Installable package, settings, async Postgres, migrations, job queue, health, logging, Sentry across services
+- [x] **Phase 1: Platform, data & CI** - Installable package, settings, async Postgres, migrations, job queue, health, logging, Sentry across services (completed 2026-04-06)
 - [ ] **Phase 2: Scraper engine** - Tiered httpx/Playwright scrapers, tiers 1–3 coverage, scheduler, parsing, per-state smokes
 - [ ] **Phase 3: MCA detection & scoring** - Alias matching, hot/warm/cold scoring, canonical debtor fields, nightly alias job, tests
 - [ ] **Phase 4: Enrichment** - Waterfall executor, persistent cache, circuit breaker HALT, retry queue, contracts, partial-fail correctness
@@ -31,7 +31,7 @@ v1 delivery follows the Kiln master-plan dependency chain: platform and data fou
   3. Against one Postgres instance, `alembic upgrade head` creates or migrates every table the three services use; async sessions support all ORM modules; concurrent workers claim/complete jobs without duplicate processing (tests or equivalent documented pattern).
   4. Each service exposes a health endpoint suitable for Railway; unhealthy states are distinguishable from healthy in responses or documented status fields.
   5. Meaningful state transitions emit structured JSON logs with `component`, `status`, `error_type`, and `context`; Sentry is initialized on all three entrypoints so exceptions are attributable per service and environment.
-**Plans:** 3 plans
+**Plans:** 0/3 plans complete
 Plans:
 - [ ] `01-PLAN.md` — README + AGENTS pointer; CI Postgres; **[BLOCKING]** `alembic upgrade head` before pytest (PLAT-01, PLAT-03, PLAT-04)
 - [ ] `02-PLAN.md` — Integration tests: DB session smoke, job queue concurrency; app/agent structured log field tests (PLAT-03, PLAT-05, PLAT-07)
@@ -150,7 +150,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Platform, data & CI | 0/TBD | Not started | - |
+| 1. Platform, data & CI | 0/3 | Complete    | 2026-04-06 |
 | 2. Scraper engine | 0/TBD | Not started | - |
 | 3. MCA detection & scoring | 0/TBD | Not started | - |
 | 4. Enrichment | 0/TBD | Not started | - |

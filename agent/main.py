@@ -5,18 +5,20 @@ Heartbeat written every cycle. Health check at /health.
 """
 
 import asyncio
-import os
+from contextlib import asynccontextmanager
 
 import sentry_sdk
-from contextlib import asynccontextmanager
 from fastapi import FastAPI
+from sqlalchemy import text
 
+from app.config import Settings
+from app.db import get_engine
 from app.logging import configure_logging
 
-# Initialize Sentry before app creation
-sentry_sdk.init(dsn=os.environ.get("SENTRY_DSN", ""))
+settings = Settings()
 
-# Configure structured logging
+sentry_sdk.init(dsn=settings.SENTRY_DSN, send_default_pii=False)
+
 configure_logging()
 
 AGENT_INTERVAL_SECONDS = 300  # 5 minutes between cycles
@@ -54,5 +56,11 @@ app = FastAPI(title="UCC Agent", lifespan=lifespan)
 
 @app.get("/health")
 async def health_check():
-    """Return service health status."""
-    return {"status": "ok"}
+    """Return service health status (200; use JSON `status` for degraded DB)."""
+    try:
+        engine = get_engine()
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+        return {"status": "ok", "database": "connected"}
+    except Exception:
+        return {"status": "degraded", "database": "unreachable"}

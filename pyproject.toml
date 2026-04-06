@@ -43,3 +43,6 @@ include = ["app*", "agent*", "watchdog*"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = [
+    "integration: tests that require a live PostgreSQL (DATABASE_URL)",
+]
