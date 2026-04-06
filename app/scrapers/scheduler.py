@@ -70,13 +70,30 @@ def create_scheduler() -> AsyncIOScheduler:
             coalesce=True,
         )
 
+    if settings.ENRICH_RETRY_JOB_ENABLED:
+        from app.enrichment.retry_worker import run_enrichment_retry_job
+
+        scheduler.add_job(
+            run_enrichment_retry_job,
+            trigger=IntervalTrigger(minutes=settings.ENRICH_RETRY_INTERVAL_MINUTES),
+            id="enrichment_retry",
+            name="Enrichment retry queue",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
     n_scrape = len(schedulable_state_codes())
-    n_total = n_scrape + (1 if settings.MCA_ALIAS_UPDATE_ENABLED else 0)
+    extra = (1 if settings.MCA_ALIAS_UPDATE_ENABLED else 0) + (
+        1 if settings.ENRICH_RETRY_JOB_ENABLED else 0
+    )
+    n_total = n_scrape + extra
     logger.info(
         "scheduler_configured",
         scrape_jobs=n_scrape,
         total_jobs=n_total,
         mca_alias_job=settings.MCA_ALIAS_UPDATE_ENABLED,
+        enrichment_retry_job=settings.ENRICH_RETRY_JOB_ENABLED,
         tier4_excluded=True,
     )
     return scheduler

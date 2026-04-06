@@ -49,6 +49,13 @@ class Settings(BaseSettings):
     MCA_ALIAS_UPDATE_ENABLED: bool = True
     MCA_ALIAS_UPDATE_INTERVAL_HOURS: int = 24
 
+    # Enrichment rolling error rate → HALT (C-03) + retry job
+    ENRICH_BREAKER_ERROR_WINDOW_SECONDS: int = 300
+    ENRICH_BREAKER_ERROR_RATE_THRESHOLD: float = 0.2
+    ENRICH_RATE_MIN_ATTEMPTS_BEFORE_HALT: int = 5
+    ENRICH_RETRY_JOB_ENABLED: bool = True
+    ENRICH_RETRY_INTERVAL_MINUTES: int = 60
+
     # Self-healing agent
     ANTHROPIC_API_KEY: str | None = None
 

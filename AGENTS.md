@@ -38,6 +38,10 @@ UCC Lead Generation Platform -- a Python 3.12+ automated pipeline that scrapes p
 - `MCA_FUZZY_MIN_ALIAS_LEN`, `MCA_FUZZY_SCORE_CUTOFF` — Rapidfuzz fuzzy alias match after exact match.
 - `MCA_ALIAS_UPDATE_ENABLED` (default true; tests force false), `MCA_ALIAS_UPDATE_INTERVAL_HOURS` — optional nightly alias updater in the scraper scheduler.
 
+### Enrichment settings (`app.config`)
+- `ENRICH_BREAKER_ERROR_WINDOW_SECONDS`, `ENRICH_BREAKER_ERROR_RATE_THRESHOLD`, `ENRICH_RATE_MIN_ATTEMPTS_BEFORE_HALT` — rolling failure-rate window before pybreaker open + HALT.
+- `ENRICH_RETRY_JOB_ENABLED` (default true; tests force false), `ENRICH_RETRY_INTERVAL_MINUTES` — scheduled `enrichment_retry_queue` processor.
+
 ### File Organization
 - `app/` -- Pipeline service (FastAPI). Subpackages: models, scrapers, detection, scoring, enrichment, compliance, dedup, export, recycling, dashboard, scheduler.
 - `agent/` -- Self-healing agent service. Subpackages: nodes.

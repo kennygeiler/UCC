@@ -35,12 +35,12 @@
 
 ### Enrichment (M4)
 
-- [ ] **ENRICH-01**: Waterfall executor runs ordered enrichment strategies with clear pass/fail semantics shared pattern (ADR-008).
-- [ ] **ENRICH-02**: Enrichment cache is persistent in Postgres with no TTL (C-08).
-- [ ] **ENRICH-03**: Per-source circuit breaker opens on threshold failure; HALT blocks export processing until recovery (C-03).
-- [ ] **ENRICH-04**: Retry queue schedules failed enrichments with documented backoff.
-- [ ] **ENRICH-05**: Contract tests validate external source response shapes used in production paths.
-- [ ] **ENRICH-06**: Partial enrichment never marks a lead complete erroneously.
+- [x] **ENRICH-01**: Waterfall executor runs ordered enrichment strategies with clear pass/fail semantics shared pattern (ADR-008).
+- [x] **ENRICH-02**: Enrichment cache is persistent in Postgres with no TTL (C-08).
+- [x] **ENRICH-03**: Per-source circuit breaker opens on threshold failure; HALT blocks export processing until recovery (C-03).
+- [x] **ENRICH-04**: Retry queue schedules failed enrichments with documented backoff.
+- [x] **ENRICH-05**: Contract tests validate external source response shapes used in production paths.
+- [x] **ENRICH-06**: Partial enrichment never marks a lead complete erroneously.
 
 ### Compliance gate (M5)
 
@@ -143,12 +143,12 @@ Deferred enhancements (not in current v1 roadmap):
 | MCA-03 | 3 | Complete |
 | MCA-04 | 3 | Complete |
 | MCA-05 | 3 | Complete |
-| ENRICH-01 | 4 | Pending |
-| ENRICH-02 | 4 | Pending |
-| ENRICH-03 | 4 | Pending |
-| ENRICH-04 | 4 | Pending |
-| ENRICH-05 | 4 | Pending |
-| ENRICH-06 | 4 | Pending |
+| ENRICH-01 | 4 | Complete |
+| ENRICH-02 | 4 | Complete |
+| ENRICH-03 | 4 | Complete |
+| ENRICH-04 | 4 | Complete |
+| ENRICH-05 | 4 | Complete |
+| ENRICH-06 | 4 | Complete |
 | COMPLY-01 | 5 | Pending |
 | COMPLY-02 | 5 | Pending |
 | COMPLY-03 | 5 | Pending |
@@ -201,4 +201,4 @@ Deferred enhancements (not in current v1 roadmap):
 
 ---
 *Requirements defined: 2026-04-06*  
-*Last updated: 2026-04-06 — MCA-01..05 marked complete (Phase 3)*
+*Last updated: 2026-04-06 — ENRICH-01..06 marked complete (Phase 4)*

@@ -43,3 +43,16 @@ def test_mca_alias_job_registered_when_enabled(monkeypatch):
     scheduler = create_scheduler()
     ids = {j.id for j in scheduler.get_jobs()}
     assert "mca_alias_update" in ids
+
+
+def test_enrichment_retry_job_registered_when_enabled(monkeypatch):
+    """When ENRICH_RETRY_JOB_ENABLED, scheduler includes enrichment_retry job."""
+    monkeypatch.setenv("ENRICH_RETRY_JOB_ENABLED", "true")
+    from app.db import _get_settings, get_async_session_factory, get_engine
+
+    _get_settings.cache_clear()
+    get_engine.cache_clear()
+    get_async_session_factory.cache_clear()
+    scheduler = create_scheduler()
+    ids = {j.id for j in scheduler.get_jobs()}
+    assert "enrichment_retry" in ids

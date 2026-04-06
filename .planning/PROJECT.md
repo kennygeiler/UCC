@@ -22,6 +22,7 @@ Capabilities evidenced by the current tree and `.planning/codebase/ARCHITECTURE.
 - ✓ Pipeline subsystems present in code: scraping (`app/scrapers/`), MCA handling (`app/mca/`), enrichment (`app/enrichment/`), compliance (`app/compliance/`), export (`app/export/`), dashboard (`app/dashboard/`) — existing
 - ✓ Operational services: LangGraph-style agent (`agent/`), independent watchdog (`watchdog/`) — existing
 - ✓ MCA detection and scoring (Phase 3): state-scoped position counts, fuzzy/shell/collateral matching, filing-scoped lead pipeline with `debtor_name_normalized`, `mca_tier`, `source_filing_id`, optional nightly alias updater — tested.
+- ✓ Enrichment (Phase 4): waterfall + breakers, aggregate Postgres cache, rolling error-rate HALT, retry backoff + scheduler job, normalized vendor mapping + completeness bar, contract fixtures — tested.
 
 ### Active
 
@@ -77,4 +78,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 — Phase 3 (MCA detection & scoring) complete*
+*Last updated: 2026-04-06 — Phase 4 (Enrichment) complete*

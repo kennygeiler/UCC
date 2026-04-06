@@ -13,6 +13,7 @@ if "pytest" in sys.modules:
     os.environ["SENTRY_DSN"] = _VALID_SENTRY_DSN
     os.environ.setdefault("SCRAPER_SCHEDULER_ENABLED", "false")
     os.environ.setdefault("MCA_ALIAS_UPDATE_ENABLED", "false")
+    os.environ.setdefault("ENRICH_RETRY_JOB_ENABLED", "false")
 
 
 @pytest.fixture(autouse=True)
@@ -22,10 +23,15 @@ def set_test_env(monkeypatch):
     monkeypatch.setenv("SENTRY_DSN", _VALID_SENTRY_DSN)
     monkeypatch.setenv("SCRAPER_SCHEDULER_ENABLED", "false")
     monkeypatch.setenv("MCA_ALIAS_UPDATE_ENABLED", "false")
+    monkeypatch.setenv("ENRICH_RETRY_JOB_ENABLED", "false")
 
     # Clear cached factories so each test picks up monkeypatched env vars
     from app.db import _get_settings, get_async_session_factory, get_engine
+    from app.enrichment.pipeline import reset_halt_logging_for_tests
+    from app.enrichment.rate_tracker import reset_rate_tracker_for_tests
 
     _get_settings.cache_clear()
     get_engine.cache_clear()
     get_async_session_factory.cache_clear()
+    reset_rate_tracker_for_tests()
+    reset_halt_logging_for_tests()
