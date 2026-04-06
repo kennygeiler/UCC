@@ -71,7 +71,7 @@ Plans:
   3. When per-source failure rates exceed the threshold, the circuit breaker opens and HALT blocks export until recovery is observable (C-03).
   4. Failed enrichments enter a retry queue with documented backoff and verifiable scheduling behavior.
   5. Contract tests lock production-path response shapes; partial enrichment never marks a lead export-complete when requirements are unmet (tests prove it).
-**Plans**: TBD
+**Plans**: `.planning/phases/04-enrichment/01-PLAN.md` (waterfall + circuit breaker wiring, ADR-008), `02-PLAN.md` (permanent cache keys + rolling error HALT, C-08/C-03), `03-PLAN.md` (retry queue backoff 1h/4h/24h/72h + scheduler job), `04-PLAN.md` (vendor contract fixtures + completeness gate, ENRICH-05/06)
 
 ### Phase 5: Compliance gate
 **Goal**: No compliant export occurs unless all four compliance layers pass; DNC and fallback behaviors match legal and architectural constraints.
