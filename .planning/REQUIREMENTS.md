@@ -27,11 +27,11 @@
 
 ### MCA detection and scoring (M3)
 
-- [ ] **MCA-01**: MCA detector matches aliases (including fuzzy/shell patterns) against `mca_aliases` and filing text.
-- [ ] **MCA-02**: Scoring incorporates position count, recency, and collateral signals with hot/warm/cold tiers.
-- [ ] **MCA-03**: Pipeline writes scored leads with canonical debtor identity fields for downstream dedup (C-10).
-- [ ] **MCA-04**: Nightly alias updater job runs safely and improves detection coverage over time.
-- [ ] **MCA-05**: Unit tests cover matcher and scorer edge cases from master-plan acceptance language.
+- [x] **MCA-01**: MCA detector matches aliases (including fuzzy/shell patterns) against `mca_aliases` and filing text.
+- [x] **MCA-02**: Scoring incorporates position count, recency, and collateral signals with hot/warm/cold tiers.
+- [x] **MCA-03**: Pipeline writes scored leads with canonical debtor identity fields for downstream dedup (C-10).
+- [x] **MCA-04**: Nightly alias updater job runs safely and improves detection coverage over time.
+- [x] **MCA-05**: Unit tests cover matcher and scorer edge cases from master-plan acceptance language.
 
 ### Enrichment (M4)
 
@@ -138,11 +138,11 @@ Deferred enhancements (not in current v1 roadmap):
 | SCRAPE-04 | 2 | Pending |
 | SCRAPE-05 | 2 | Pending |
 | SCRAPE-06 | 2 | Pending |
-| MCA-01 | 3 | Pending |
-| MCA-02 | 3 | Pending |
-| MCA-03 | 3 | Pending |
-| MCA-04 | 3 | Pending |
-| MCA-05 | 3 | Pending |
+| MCA-01 | 3 | Complete |
+| MCA-02 | 3 | Complete |
+| MCA-03 | 3 | Complete |
+| MCA-04 | 3 | Complete |
+| MCA-05 | 3 | Complete |
 | ENRICH-01 | 4 | Pending |
 | ENRICH-02 | 4 | Pending |
 | ENRICH-03 | 4 | Pending |
@@ -201,4 +201,4 @@ Deferred enhancements (not in current v1 roadmap):
 
 ---
 *Requirements defined: 2026-04-06*  
-*Last updated: 2026-04-06 — roadmap traceability (10 phases, 1:1 REQ → phase)*
+*Last updated: 2026-04-06 — MCA-01..05 marked complete (Phase 3)*

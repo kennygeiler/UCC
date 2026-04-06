@@ -1,8 +1,11 @@
 """Tests for MCA detector module."""
 
+import pytest
+
 from app.mca.detector import (
     check_collateral_keywords,
     check_shell_patterns,
+    detect_mca,
     normalize_name,
 )
 
@@ -50,3 +53,65 @@ def test_shell_pattern_match():
 def test_shell_pattern_no_match():
     """Non-shell company returns 0."""
     assert check_shell_patterns("General Electric") == 0.0
+
+
+@pytest.mark.asyncio
+async def test_detect_mca_exact_alias_injected_map():
+    """Exact normalized match uses alias map without DB."""
+    amap = {"yellowstone capital": ("Yellowstone MCA", 0.95)}
+    ok, canon, conf = await detect_mca("Yellowstone Capital LLC", None, alias_map=amap)
+    assert ok is True
+    assert canon == "Yellowstone MCA"
+    assert conf == 0.95
+
+
+@pytest.mark.asyncio
+async def test_detect_mca_shell_path_injected_map():
+    """Shell pattern matches when alias map misses."""
+    amap: dict[str, tuple[str, float]] = {}
+    ok, canon, conf = await detect_mca("ABC Cash Advance Group", None, alias_map=amap)
+    assert ok is True
+    assert conf == 0.7
+
+
+@pytest.mark.asyncio
+async def test_detect_mca_collateral_path_injected_map():
+    """Collateral keywords match when secured party is present."""
+    amap: dict[str, tuple[str, float]] = {}
+    ok, canon, conf = await detect_mca(
+        "Some Random Bank LLC",
+        "Equipment and all assets and future receipts",
+        alias_map=amap,
+    )
+    assert ok is True
+    assert conf == 0.5
+
+
+@pytest.mark.asyncio
+async def test_detect_mca_negative_injected_map():
+    """No MCA signal returns false."""
+    amap: dict[str, tuple[str, float]] = {}
+    ok, _, _ = await detect_mca(
+        "General Electric Company",
+        "Industrial equipment only",
+        alias_map=amap,
+    )
+    assert ok is False
+
+
+@pytest.mark.asyncio
+async def test_detect_mca_fuzzy_typo_above_cutoff(monkeypatch):
+    """Fuzzy alias: minor typo still matches configured alias."""
+    monkeypatch.setenv("MCA_FUZZY_SCORE_CUTOFF", "80")
+    monkeypatch.setenv("MCA_FUZZY_MIN_ALIAS_LEN", "5")
+    amap = {"yellowstone capital": ("Yellowstone MCA", 0.95)}
+    ok, canon, conf = await detect_mca(
+        "Yellowstone Capitl LLC",
+        None,
+        alias_map=amap,
+    )
+    assert ok is True
+    assert canon == "Yellowstone MCA"
+    assert conf < 0.95
+
+

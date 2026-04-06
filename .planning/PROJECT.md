@@ -21,6 +21,7 @@ Capabilities evidenced by the current tree and `.planning/codebase/ARCHITECTURE.
 - ✓ Shared PostgreSQL schema via SQLAlchemy 2.0 async models (`app/models/`) and Alembic migrations (`migrations/`) — existing
 - ✓ Pipeline subsystems present in code: scraping (`app/scrapers/`), MCA handling (`app/mca/`), enrichment (`app/enrichment/`), compliance (`app/compliance/`), export (`app/export/`), dashboard (`app/dashboard/`) — existing
 - ✓ Operational services: LangGraph-style agent (`agent/`), independent watchdog (`watchdog/`) — existing
+- ✓ MCA detection and scoring (Phase 3): state-scoped position counts, fuzzy/shell/collateral matching, filing-scoped lead pipeline with `debtor_name_normalized`, `mca_tier`, `source_filing_id`, optional nightly alias updater — tested.
 
 ### Active
 
@@ -76,4 +77,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-04-06 after GSD project initialization (brownfield)*
+*Last updated: 2026-04-06 — Phase 3 (MCA detection & scoring) complete*

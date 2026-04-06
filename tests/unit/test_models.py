@@ -45,6 +45,7 @@ def test_lead_instantiation():
     from app.models import Lead
     lead = Lead(
         debtor_name="Test Corp",
+        debtor_name_normalized="test corp",
         state="NY",
         lead_score=85.0,
         mca_position_count=3,

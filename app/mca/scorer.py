@@ -30,6 +30,7 @@ async def count_positions(debtor_name: str, state: str) -> int:
         result = await session.execute(
             select(func.count(UCCFiling.id)).where(
                 UCCFiling.debtor_name == debtor_name,
+                UCCFiling.state == state,
             )
         )
         return result.scalar_one()

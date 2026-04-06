@@ -38,7 +38,7 @@ class CSVFallbackAdapter(CampaignPlatformAdapter):
             "first_name": lead_data.get("owner_name", "").split()[0] if lead_data.get("owner_name") else "",
             "last_name": " ".join(lead_data.get("owner_name", "").split()[1:]) if lead_data.get("owner_name") else "",
             "company_name": lead_data.get("debtor_name", ""),
-            "tags": f"tier-{lead_data.get('tier', 'cold')}",
+            "tags": f"tier-{lead_data.get('mca_tier') or lead_data.get('tier', 'cold')}",
         }
         _append_csv(filepath, row)
         logger.info("csv_export", filepath=filepath)

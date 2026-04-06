@@ -10,7 +10,7 @@ v1 delivery follows the Kiln master-plan dependency chain: platform and data fou
 
 - [x] **Phase 1: Platform, data & CI** - Installable package, settings, async Postgres, migrations, job queue, health, logging, Sentry across services (completed 2026-04-06)
 - [x] **Phase 2: Scraper engine** - Tiered httpx/Playwright scrapers, tiers 1–3 coverage, scheduler, parsing, per-state smokes (completed 2026-04-06)
-- [ ] **Phase 3: MCA detection & scoring** - Alias matching, hot/warm/cold scoring, canonical debtor fields, nightly alias job, tests
+- [x] **Phase 3: MCA detection & scoring** - Alias matching, hot/warm/cold scoring, canonical debtor fields, nightly alias job, tests (completed 2026-04-06)
 - [ ] **Phase 4: Enrichment** - Waterfall executor, persistent cache, circuit breaker HALT, retry queue, contracts, partial-fail correctness
 - [ ] **Phase 5: Compliance gate** - Four-layer gate, internal DNC, DataMerch fallback, external layers, no bypass, negative tests, audit-safe logs
 - [ ] **Phase 6: Dedup, export & GHL** - Cross-state dedup, adapter-only campaign IO, GHL upsert + fields, CSV fallback, webhook, recycler, tests, no stray GHL imports
@@ -152,7 +152,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. Platform, data & CI | 0/3 | Complete    | 2026-04-06 |
 | 2. Scraper engine | 4/4 | Complete    | 2026-04-06 |
-| 3. MCA detection & scoring | 0/TBD | Not started | - |
+| 3. MCA detection & scoring | 4/4 | Complete    | 2026-04-06 |
 | 4. Enrichment | 0/TBD | Not started | - |
 | 5. Compliance gate | 0/TBD | Not started | - |
 | 6. Dedup, export & GHL | 0/TBD | Not started | - |

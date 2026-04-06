@@ -2,7 +2,7 @@
 
 from datetime import datetime
 
-from sqlalchemy import DateTime, Float, Index, Integer, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Index, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.models.base import Base, TimestampMixin
@@ -15,9 +15,14 @@ class Lead(TimestampMixin, Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     debtor_name: Mapped[str] = mapped_column(Text, nullable=False)
+    debtor_name_normalized: Mapped[str] = mapped_column(Text, nullable=False, default="")
     state: Mapped[str] = mapped_column(Text, nullable=False)
     lead_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     mca_position_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    mca_tier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source_filing_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("ucc_filings.id"), nullable=True, unique=True
+    )
     phone: Mapped[str | None] = mapped_column(Text, nullable=True)
     email: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_name: Mapped[str | None] = mapped_column(Text, nullable=True)

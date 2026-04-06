@@ -54,3 +54,14 @@ def test_compute_score_cold_lead():
     """Cold lead with no boosts scores low."""
     score = compute_score(position_count=1, recency_boost=0.0, has_mca_collateral=False)
     assert score == 10.0
+
+
+def test_score_changes_with_recency_and_collateral_tier_unchanged():
+    """MCA-02: lead_score moves with recency/collateral; tier is position-only."""
+    assert assign_tier(2) == "warm"
+    low = compute_score(2, recency_boost=0.0, has_mca_collateral=False)
+    high_recency = compute_score(2, recency_boost=1.0, has_mca_collateral=False)
+    with_collateral = compute_score(2, recency_boost=0.0, has_mca_collateral=True)
+    assert high_recency > low
+    assert with_collateral > low
+    assert assign_tier(2) == assign_tier(2)

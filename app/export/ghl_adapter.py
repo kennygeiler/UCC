@@ -49,7 +49,9 @@ class GHLAdapter(CampaignPlatformAdapter):
             "firstName": lead_data.get("owner_name", "").split()[0] if lead_data.get("owner_name") else "",
             "lastName": " ".join(lead_data.get("owner_name", "").split()[1:]) if lead_data.get("owner_name") else "",
             "companyName": lead_data.get("debtor_name"),
-            "tags": [f"tier-{lead_data.get('tier', 'cold')}"],
+            "tags": [
+                f"tier-{lead_data.get('mca_tier') or lead_data.get('tier', 'cold')}"
+            ],
         }
         async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(

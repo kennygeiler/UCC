@@ -8,7 +8,7 @@ from app.scrapers.scheduler import create_scheduler, run_scraper
 
 
 def test_create_scheduler_job_count_matches_schedulable_states():
-    """One interval job per tier 1–3 state; Tier 4 registry stubs are excluded."""
+    """One interval job per tier 1–3 state; MCA alias job off in test env."""
     scheduler = create_scheduler()
     jobs = scheduler.get_jobs()
     expected = len(schedulable_state_codes())
@@ -35,3 +35,11 @@ async def test_run_scraper_handles_unknown_state():
     from app.scrapers.rate_limiter import RateLimiter
 
     await run_scraper("XX", RateLimiter())
+
+
+def test_mca_alias_job_registered_when_enabled(monkeypatch):
+    """When MCA_ALIAS_UPDATE_ENABLED, scheduler includes mca_alias_update job."""
+    monkeypatch.setenv("MCA_ALIAS_UPDATE_ENABLED", "true")
+    scheduler = create_scheduler()
+    ids = {j.id for j in scheduler.get_jobs()}
+    assert "mca_alias_update" in ids

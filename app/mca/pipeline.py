@@ -8,7 +8,7 @@ from sqlalchemy import select
 
 from app.db import get_session
 from app.logging import get_logger
-from app.mca.detector import check_collateral_keywords, detect_mca
+from app.mca.detector import check_collateral_keywords, detect_mca, normalize_name
 from app.mca.scorer import score_lead
 from app.models.filing import UCCFiling
 from app.models.lead import Lead
@@ -17,7 +17,7 @@ logger = get_logger("mca_pipeline")
 
 
 async def get_unprocessed_filings(batch_size: int = 100) -> list[UCCFiling]:
-    """Fetch filings that haven't been analyzed for MCA yet.
+    """Fetch filings that haven't been analyzed for MCA yet (per filing id).
 
     Args:
         batch_size: Maximum number of filings to process per batch.
@@ -25,7 +25,7 @@ async def get_unprocessed_filings(batch_size: int = 100) -> list[UCCFiling]:
     async with get_session() as session:
         result = await session.execute(
             select(UCCFiling)
-            .outerjoin(Lead, UCCFiling.debtor_name == Lead.debtor_name)
+            .outerjoin(Lead, Lead.source_filing_id == UCCFiling.id)
             .where(Lead.id.is_(None))
             .limit(batch_size)
         )
@@ -35,13 +35,23 @@ async def get_unprocessed_filings(batch_size: int = 100) -> list[UCCFiling]:
 async def process_filing(filing: UCCFiling) -> Lead | None:
     """Process a single UCC filing through detection and scoring.
 
+    Idempotent: if a lead already exists for ``filing.id``, returns that lead.
+
     Args:
         filing: UCC filing record to analyze.
 
     Returns:
         Created Lead if MCA detected, None otherwise.
     """
-    is_mca, canonical_lender, confidence = await detect_mca(
+    async with get_session() as session:
+        existing = await session.execute(
+            select(Lead).where(Lead.source_filing_id == filing.id)
+        )
+        prior = existing.scalar_one_or_none()
+        if prior is not None:
+            return prior
+
+    is_mca, _canonical_lender, _confidence = await detect_mca(
         filing.secured_party, filing.collateral_description
     )
     if not is_mca:
@@ -52,12 +62,17 @@ async def process_filing(filing: UCCFiling) -> Lead | None:
         filing.debtor_name, filing.state, filing.filing_date, has_mca_collateral
     )
 
+    debtor_key = normalize_name(filing.debtor_name)
+
     async with get_session() as session:
         lead = Lead(
             debtor_name=filing.debtor_name,
+            debtor_name_normalized=debtor_key,
             state=filing.state,
             lead_score=scoring["lead_score"],
             mca_position_count=scoring["mca_position_count"],
+            mca_tier=scoring["tier"],
+            source_filing_id=filing.id,
             enrichment_status="pending",
             compliance_status="pending",
             export_status="pending",

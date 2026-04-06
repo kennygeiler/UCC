@@ -6,6 +6,7 @@ Tier 1: daily, Tier 2: every 36 hours, Tier 3: every 48 hours.
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
+from app.config import Settings
 from app.logging import get_logger
 from app.scrapers.rate_limiter import RateLimiter
 from app.scrapers.registry import SCRAPER_REGISTRY, schedulable_state_codes
@@ -55,6 +56,27 @@ def create_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
-    n = len(schedulable_state_codes())
-    logger.info("scheduler_configured", total_jobs=n, tier4_excluded=True)
+    settings = Settings()
+    if settings.MCA_ALIAS_UPDATE_ENABLED:
+        from app.mca.alias_updater import run_alias_update_job
+
+        scheduler.add_job(
+            run_alias_update_job,
+            trigger=IntervalTrigger(hours=settings.MCA_ALIAS_UPDATE_INTERVAL_HOURS),
+            id="mca_alias_update",
+            name="MCA alias auto-update",
+            replace_existing=True,
+            max_instances=1,
+            coalesce=True,
+        )
+
+    n_scrape = len(schedulable_state_codes())
+    n_total = n_scrape + (1 if settings.MCA_ALIAS_UPDATE_ENABLED else 0)
+    logger.info(
+        "scheduler_configured",
+        scrape_jobs=n_scrape,
+        total_jobs=n_total,
+        mca_alias_job=settings.MCA_ALIAS_UPDATE_ENABLED,
+        tier4_excluded=True,
+    )
     return scheduler

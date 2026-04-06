@@ -41,6 +41,14 @@ class Settings(BaseSettings):
     # Pipeline: start APScheduler for tiered scrapes (disable in tests via env)
     SCRAPER_SCHEDULER_ENABLED: bool = True
 
+    # MCA detector — fuzzy alias match (after exact match; O(n) over alias rows)
+    MCA_FUZZY_MIN_ALIAS_LEN: int = 5
+    MCA_FUZZY_SCORE_CUTOFF: int = 85
+
+    # MCA alias auto-updater job (same scheduler as scrapers)
+    MCA_ALIAS_UPDATE_ENABLED: bool = True
+    MCA_ALIAS_UPDATE_INTERVAL_HOURS: int = 24
+
     # Self-healing agent
     ANTHROPIC_API_KEY: str | None = None
 

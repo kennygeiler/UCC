@@ -6,7 +6,8 @@ from successful leads, and adds new aliases with appropriate confidence.
 
 from datetime import datetime, timedelta, timezone
 
-from sqlalchemy import func, select
+from sqlalchemy import select
+from sqlalchemy.dialects.postgresql import insert
 
 from app.db import get_session
 from app.logging import get_logger
@@ -44,7 +45,7 @@ async def get_existing_aliases() -> set[str]:
 
 
 async def find_high_converting_parties() -> list[str]:
-    """Find secured party names associated with hot leads.
+    """Find secured party names associated with hot leads (state-safe join).
 
     Returns:
         List of secured party names linked to high-scoring leads.
@@ -52,7 +53,11 @@ async def find_high_converting_parties() -> list[str]:
     async with get_session() as session:
         result = await session.execute(
             select(UCCFiling.secured_party)
-            .join(Lead, UCCFiling.debtor_name == Lead.debtor_name)
+            .join(
+                Lead,
+                (UCCFiling.debtor_name == Lead.debtor_name)
+                & (UCCFiling.state == Lead.state),
+            )
             .where(Lead.lead_score >= 30.0)
             .where(UCCFiling.secured_party.isnot(None))
             .distinct()
@@ -63,26 +68,55 @@ async def find_high_converting_parties() -> list[str]:
 async def run_alias_update() -> int:
     """Execute the nightly alias update job.
 
+    Uses INSERT ... ON CONFLICT DO NOTHING for idempotent inserts.
+
     Returns:
-        Number of new aliases added.
+        Number of new aliases attempted (rows skipped on conflict do not raise).
     """
     existing = await get_existing_aliases()
     high_converting = await find_high_converting_parties()
-    added = 0
+    inserted = 0
 
     async with get_session() as session:
         for party_name in high_converting:
             normalized = normalize_name(party_name)
-            if normalized not in existing and len(normalized) > 2:
-                alias = MCAlias(
+            if normalized in existing or len(normalized) <= 2:
+                continue
+            stmt = (
+                insert(MCAlias)
+                .values(
                     alias_name=party_name,
                     canonical_lender_name=party_name,
                     confidence=0.8,
                     source="auto_updater",
                 )
-                session.add(alias)
-                existing.add(normalized)
-                added += 1
+                .on_conflict_do_nothing(index_elements=["alias_name"])
+            )
+            result = await session.execute(stmt)
+            rc = getattr(result, "rowcount", None) or 0
+            if rc > 0:
+                inserted += 1
+            existing.add(normalized)
 
-    logger.info("alias_update_complete", new_aliases=added)
-    return added
+    logger.info("alias_update_complete", new_aliases_inserted=inserted)
+    return inserted
+
+
+async def run_alias_update_job() -> None:
+    """APScheduler entrypoint: run alias update and log outcome (never crashes scheduler)."""
+    try:
+        n = await run_alias_update()
+        logger.info(
+            "alias_update_job_complete",
+            component="alias_updater",
+            status="ok",
+            new_aliases=n,
+        )
+    except Exception as exc:
+        logger.error(
+            "alias_update_job_failed",
+            component="alias_updater",
+            status="failed",
+            error_type=type(exc).__name__,
+            context=str(exc)[:500],
+        )

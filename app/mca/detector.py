@@ -1,9 +1,16 @@
-"""MCA detector — matches UCC filing secured parties against known aliases."""
+"""MCA detector — matches UCC filing secured parties against known aliases.
+
+Fuzzy matching scans normalized alias keys in O(n) per secured party. Acceptable
+while ``mca_aliases`` row counts stay in the low thousands; if n grows large,
+add batching or an indexed lookup strategy.
+"""
 
 import re
 
+from rapidfuzz import fuzz, process
 from sqlalchemy import select
 
+from app.config import Settings
 from app.db import get_session
 from app.logging import get_logger
 from app.models.mca_alias import MCAlias
@@ -37,9 +44,39 @@ async def load_alias_map() -> dict[str, tuple[str, float]]:
         result = await session.execute(select(MCAlias))
         aliases = result.scalars().all()
     return {
-        normalize_name(a.alias_name): (a.canonical_lender_name, a.confidence)
+        normalize_name(a.alias_name): (a.canonical_lender_name, a.confidence or 0.9)
         for a in aliases
     }
+
+
+def _fuzzy_match_alias(
+    normalized: str,
+    alias_map: dict[str, tuple[str, float]],
+) -> tuple[str, float] | None:
+    """Match secured party to the closest normalized alias key using WRatio.
+
+    Returns:
+        (canonical_lender, confidence) or None if below cutoff or too short.
+    """
+    settings = Settings()
+    if len(normalized) < settings.MCA_FUZZY_MIN_ALIAS_LEN:
+        return None
+    if not alias_map:
+        return None
+
+    keys = list(alias_map.keys())
+    result = process.extractOne(
+        normalized,
+        keys,
+        scorer=fuzz.WRatio,
+        score_cutoff=settings.MCA_FUZZY_SCORE_CUTOFF,
+    )
+    if result is None:
+        return None
+    match_key, score, _ = result
+    canonical, base_conf = alias_map[match_key]
+    adjusted = (base_conf or 0.9) * (score / 100.0)
+    return canonical, min(adjusted, 0.99)
 
 
 def check_collateral_keywords(collateral: str | None) -> bool:
@@ -71,13 +108,21 @@ def check_shell_patterns(name: str) -> float:
 
 
 async def detect_mca(
-    secured_party: str | None, collateral: str | None
+    secured_party: str | None,
+    collateral: str | None,
+    *,
+    alias_map: dict[str, tuple[str, float]] | None = None,
 ) -> tuple[bool, str | None, float]:
     """Determine if a filing is MCA-related.
+
+    Precedence: exact normalized alias → fuzzy alias → shell patterns →
+    collateral keywords.
 
     Args:
         secured_party: Name of the secured party from the filing.
         collateral: Collateral description text.
+        alias_map: Optional preloaded map (normalized key → canonical, conf).
+            When None, loads from the database.
 
     Returns:
         Tuple of (is_mca, canonical_lender_name, confidence).
@@ -85,20 +130,24 @@ async def detect_mca(
     if not secured_party:
         return False, None, 0.0
 
-    alias_map = await load_alias_map()
+    if alias_map is None:
+        alias_map = await load_alias_map()
+
     normalized = normalize_name(secured_party)
 
-    # Exact alias match
     if normalized in alias_map:
         canonical, confidence = alias_map[normalized]
+        return True, canonical, confidence or 0.9
+
+    fuzzy_hit = _fuzzy_match_alias(normalized, alias_map)
+    if fuzzy_hit is not None:
+        canonical, confidence = fuzzy_hit
         return True, canonical, confidence
 
-    # Shell company pattern match
     shell_confidence = check_shell_patterns(secured_party)
     if shell_confidence > 0:
         return True, secured_party, shell_confidence
 
-    # Collateral keyword match (weaker signal)
     if check_collateral_keywords(collateral):
         return True, secured_party, 0.5
 
