@@ -4,6 +4,10 @@ plan: "01"
 type: execute
 wave: 1
 depends_on: []
+requirements:
+  - PLAT-01
+  - PLAT-04
+  - PLAT-03
 requirements_addressed:
   - PLAT-01
   - PLAT-04
@@ -64,6 +68,7 @@ Output: `README.md`, updated `ci.yml`, optional small `AGENTS.md` cross-link onl
 
 <task type="auto">
   <name>Task 1: Root README and AGENTS.md cross-links (PLAT-01)</name>
+  <files>README.md</files>
   <read_first>
     - `AGENTS.md` (commands section)
     - `pyproject.toml` (`[project]` and dev extras)
@@ -72,14 +77,15 @@ Output: `README.md`, updated `ci.yml`, optional small `AGENTS.md` cross-link onl
   <action>
     Add `README.md` at repo root: title, one-paragraph product summary, **Prerequisites** (Python 3.12+, Postgres for integration/migrations), **Editable install** (`python3.12 -m venv .venv`, `source .venv/bin/activate`, `pip install -e ".[dev]"`), **Run tests** (`pytest`), **Run migrations** (`alembic upgrade head` with `DATABASE_URL` set—reference asyncpg URL shape), **CI parity** sentence stating GitHub Actions runs the same install + Alembic + pytest. Link to `AGENTS.md` for uvicorn/agent/watchdog commands. Do not duplicate full constraint docs. Mention PEP 668: use a venv. No lockfile: note reproducibility uses `pyproject.toml` lower bounds.
   </action>
-  <acceptance_criteria>
-    - `test -f README.md` succeeds at repo root.
-    - `grep -q "pip install -e" README.md && grep -q pytest README.md && grep -q AGENTS.md README.md`
-  </acceptance_criteria>
+  <verify>
+    <automated>test -f README.md && grep -q "pip install -e" README.md && grep -q pytest README.md && grep -q AGENTS.md README.md</automated>
+  </verify>
+  <done>Root `README.md` exists with venv + editable install, pytest, migrations + `DATABASE_URL` note, CI parity line, link to `AGENTS.md`, and placeholder DSN examples only (no real credentials).</done>
 </task>
 
 <task type="auto">
   <name>Task 2: [BLOCKING] CI Postgres service + `alembic upgrade head` + pytest (PLAT-01, PLAT-04, PLAT-03)</name>
+  <files>.github/workflows/ci.yml</files>
   <read_first>
     - `.github/workflows/ci.yml`
     - `migrations/env.py` (async URL normalization)
@@ -88,21 +94,23 @@ Output: `README.md`, updated `ci.yml`, optional small `AGENTS.md` cross-link onl
   <action>
     Update `ci.yml`: add `services.postgres` (e.g. `postgres:16`) with `POSTGRES_USER`, `POSTGRES_PASSWORD`, `POSTGRES_DB` matching a single `DATABASE_URL` for the job (use `localhost:5432` from job container). Add a step to wait for Postgres TCP readiness (e.g. `pg_isready` or retry loop) before migrations. Add step **after** install: run `alembic upgrade head` with `DATABASE_URL` set to `postgresql+asyncpg://...` (same shape as `migrations/env.py` expects). Then run `pytest` with identical `DATABASE_URL` and `SENTRY_DSN` (fake DSN acceptable). Ensure migration step is `[BLOCKING]`: `set -e` / non-zero exit fails the workflow. Do not print full `DATABASE_URL` in step names or echo commands that expose secrets if later switched to GitHub Secrets.
   </action>
-  <acceptance_criteria>
-    - `grep -q "services:" .github/workflows/ci.yml && grep -q "postgres" .github/workflows/ci.yml`
-    - `grep -q "alembic upgrade head" .github/workflows/ci.yml`
-    - YAML validates (no duplicate keys); workflow file remains valid GitHub Actions syntax.
-    - `<automated>cd repo root with act or push to branch — prefer local: python -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))" 2>/dev/null || yamllint .github/workflows/ci.yml 2>/dev/null || true` — executor must run at least: `python3 -c "import yaml; yaml.safe_load(open('.github/workflows/ci.yml'))"` if PyYAML available, else eyeball structure.
-  </acceptance_criteria>
+  <verify>
+    <automated>grep -q "services:" .github/workflows/ci.yml && grep -q "postgres" .github/workflows/ci.yml && grep -q "alembic upgrade head" .github/workflows/ci.yml</automated>
+  </verify>
+  <done>Workflow defines Postgres service, waits for DB readiness, runs `alembic upgrade head` as a blocking step before `pytest`, and sets `DATABASE_URL` / `SENTRY_DSN` without leaking secrets in log-oriented step output.</done>
 </task>
 
 <task type="auto">
   <name>Task 3: AGENTS.md pointer to README (PLAT-01)</name>
+  <files>AGENTS.md</files>
   <read_first>`AGENTS.md` top sections</read_first>
   <action>
     Add one short subsection or bullet under **Commands** or after **Architecture TL;DR**: "First-time setup and CI parity: see root `README.md`."
   </action>
-  <acceptance_criteria>`grep -q README.md AGENTS.md`</acceptance_criteria>
+  <verify>
+    <automated>grep -q README.md AGENTS.md</automated>
+  </verify>
+  <done>`AGENTS.md` points readers to root `README.md` for first-time setup and CI parity.</done>
 </task>
 
 </tasks>

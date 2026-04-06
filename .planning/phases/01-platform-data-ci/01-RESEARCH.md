@@ -188,6 +188,16 @@ From Sentry Python configuration options: the DSN tells the SDK where to send ev
    - What’s unclear: duplicate config vs shared neutral package.  
    - Recommendation: smallest duplicate `watchdog/logging_config.py` mirroring JSON shape.
 
+## Open Questions (RESOLVED)
+
+Decisions below lock planning and execution for Phase 1; they supersede the open-ended “Recommendation” lines in **## Open questions** above.
+
+| # | Question | Decision | Plans / reqs |
+|---|----------|----------|----------------|
+| 1 | Should `/health` return non-200 when the database is unreachable? | **Default HTTP 200** with JSON that distinguishes state: `status` is `ok` when dependencies are healthy and `degraded` when not; include explicit `database` (`connected` / `unreachable`) on pipeline and agent. Document in README that operators and Railway should read JSON fields; avoid **503** on DB failure unless ops explicitly changes restart policy later. | `03-PLAN.md` Task 2; PLAT-06 |
+| 2 | Should `SENTRY_DSN` stay required on `Settings` for local/dev pipeline and agent? | **Yes.** Keep `SENTRY_DSN` required on `Settings` for `app` and `agent`. Call `Settings()` before `sentry_sdk.init` and pass `settings.SENTRY_DSN` with `send_default_pii=False`. **Watchdog** continues to read DSN from `os.environ` only (C-07); do not import `app.config` / `Settings` in watchdog. | `03-PLAN.md` Task 3; PLAT-02, PLAT-08, C-07 |
+| 3 | How should watchdog get structured JSON logs without importing `app.logging`? | **Duplicate minimal config** under `watchdog/logging_config.py`: `structlog` JSON processors and the same required field names (`component`, `status`, `error_type`, `context`) as pipeline. No `from app` / `from agent` anywhere in `watchdog/` for this work. | `03-PLAN.md` Task 1; PLAT-07, C-07 |
+
 ## Environment availability
 
 **Step 2.6 note:** Probed in this session: **Python 3.14** on PATH; `pip install -e ".[dev]"` failed under **PEP 668** (externally managed environment). Project requires **3.12+** [VERIFIED: pyproject.toml]; CI pins **3.12** [VERIFIED: ci.yml].

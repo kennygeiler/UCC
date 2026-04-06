@@ -5,6 +5,10 @@ type: execute
 wave: 2
 depends_on:
   - "01"
+requirements:
+  - PLAT-03
+  - PLAT-05
+  - PLAT-07
 requirements_addressed:
   - PLAT-03
   - PLAT-05
@@ -65,6 +69,7 @@ Output: New/extended tests under `tests/integration/` and `tests/unit/`; optiona
 
 <task type="auto">
   <name>Task 1: Integration — async session smoke after migrations (PLAT-03)</name>
+  <files>tests/integration/test_db_postgres.py, pyproject.toml</files>
   <read_first>
     - `app/db.py` (`get_session`, engine disposal)
     - `tests/conftest.py` for existing env assumptions
@@ -72,14 +77,15 @@ Output: New/extended tests under `tests/integration/` and `tests/unit/`; optiona
   <action>
     Add `tests/integration/test_db_postgres.py` that skips when `DATABASE_URL` is unset or clearly non-runnable (use `pytest.importorskip` or a marker `integration`). When run (CI after plan 01): acquire `get_session()` (or equivalent project pattern), execute `SELECT 1` or `SELECT COUNT(*) FROM job_queue` (table must exist post-alembic), assert success, dispose cleanly. Register marker `integration` in `pyproject.toml` under `[tool.pytest.ini_options]` if not present (`markers = ["integration: requires Postgres"]`). Document in test module docstring: run via full `pytest` in CI, not required for offline unit-only runs if team later splits jobs.
   </action>
-  <acceptance_criteria>
-    - File exists: `tests/integration/test_db_postgres.py`
-    - `pytest tests/integration/test_db_postgres.py -q --tb=short` passes in CI after `alembic upgrade head` (plan 01); locally passes when `DATABASE_URL` points at migrated DB or test skips with documented reason.
-  </acceptance_criteria>
+  <verify>
+    <automated>test -f tests/integration/test_db_postgres.py && pytest tests/integration/test_db_postgres.py -q --tb=short</automated>
+  </verify>
+  <done>Integration module exists; with migrated Postgres and `DATABASE_URL` set, async session runs a trivial query successfully; marker registered when added; skips cleanly when DB unavailable.</done>
 </task>
 
 <task type="auto" tdd="true">
   <name>Task 2: Integration — concurrent `claim()` single-job ownership (PLAT-05)</name>
+  <files>tests/integration/test_job_queue_concurrency.py</files>
   <read_first>
     - `app/services/job_queue.py` (`claim`, `enqueue`, `complete`)
     - `app/models/job.py` (`JobQueue` columns)
@@ -91,21 +97,23 @@ Output: New/extended tests under `tests/integration/` and `tests/unit/`; optiona
   <action>
     Add `tests/integration/test_job_queue_concurrency.py` using real Postgres: `enqueue` one job in a setup transaction; then run two concurrent `claim` calls with `asyncio.gather` using independent sessions; assert one None and one non-None OR deterministic ordering with row-level lock behavior; assert DB has exactly one `running` job. Use unique `worker_id` strings. Clean up job row in teardown (complete or delete) to avoid polluting parallel tests. Mark `integration`.
   </action>
-  <acceptance_criteria>
-    - `pytest tests/integration/test_job_queue_concurrency.py -q --tb=short` passes in CI with Postgres.
-  </acceptance_criteria>
+  <verify>
+    <automated>test -f tests/integration/test_job_queue_concurrency.py && pytest tests/integration/test_job_queue_concurrency.py -q --tb=short</automated>
+  </verify>
+  <done>Concurrent claims against one pending job yield single ownership; DB shows exactly one `running` row; teardown leaves no stray rows for parallel tests.</done>
 </task>
 
 <task type="auto">
   <name>Task 3: Unit — structured log required fields sampling (PLAT-07, app/agent)</name>
+  <files>tests/unit/test_logging.py</files>
   <read_first>`tests/unit/test_logging.py`, `app/logging.py`</read_first>
   <action>
     Extend `test_logging.py` (or add focused test) to assert that when `get_logger("test_component").info("evt", status="ok", error_type=None, context={"k": "v"})` (or project’s binding pattern), captured output JSON includes keys `component`, `status`, `error_type`, `context` per `AGENTS.md`. Keep watchdog out of this task (plan 03). Avoid logging secrets in fixture context values.
   </action>
-  <acceptance_criteria>
-    - `pytest tests/unit/test_logging.py -q --tb=short` passes.
-    - `grep -E "component|status|error_type|context" tests/unit/test_logging.py`
-  </acceptance_criteria>
+  <verify>
+    <automated>grep -E "component|status|error_type|context" tests/unit/test_logging.py && pytest tests/unit/test_logging.py -q --tb=short</automated>
+  </verify>
+  <done>Unit tests prove emitted JSON logs include `component`, `status`, `error_type`, and `context` for the exercised pipeline logging path.</done>
 </task>
 
 </tasks>

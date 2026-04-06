@@ -5,6 +5,11 @@ type: execute
 wave: 3
 depends_on:
   - "02"
+requirements:
+  - PLAT-02
+  - PLAT-06
+  - PLAT-07
+  - PLAT-08
 requirements_addressed:
   - PLAT-02
   - PLAT-06
@@ -12,6 +17,7 @@ requirements_addressed:
   - PLAT-08
 autonomous: true
 files_modified:
+  - README.md
   - app/main.py
   - agent/main.py
   - watchdog/main.py
@@ -74,6 +80,7 @@ Constraint **C-07**: `watchdog` MUST NOT import `app` or `agent`. Watchdog confi
 
 <task type="auto">
   <name>Task 1: Watchdog structured JSON logging — no app imports (PLAT-07, C-07)</name>
+  <files>watchdog/logging_config.py, watchdog/main.py, watchdog/monitor.py, tests/unit/test_watchdog_logging.py</files>
   <read_first>
     - `app/logging.py` (processors, JSON renderer—copy patterns, not imports)
     - `watchdog/main.py`, `watchdog/monitor.py`
@@ -81,15 +88,15 @@ Constraint **C-07**: `watchdog` MUST NOT import `app` or `agent`. Watchdog confi
   <action>
     Add `watchdog/logging_config.py` implementing `configure_logging()` and `get_logger(component: str)` using `structlog` with JSON output analogous to pipeline (same key names for required fields). Call `configure_logging()` at start of `watchdog/main.py` before Sentry init. In `watchdog/monitor.py`, replace or augment `print`/plain logging with `get_logger("watchdog_monitor").info(...)` for at least: loop start, heartbeat check outcome (use `status`, `error_type`, `context` keys—use `error_type=None` where N/A). **Forbidden:** `from app.` or `from agent.` anywhere in watchdog package for this task.
   </action>
-  <acceptance_criteria>
-    - `grep -r "from app" watchdog/` and `grep -r "from agent" watchdog/` show no matches (or only unrelated historical—must be zero after change).
-    - `pytest tests/unit/test_watchdog_main.py -q --tb=short` passes.
-    - New `tests/unit/test_watchdog_logging.py` parses captured log line and asserts presence of `component`, `status`, `error_type`, `context` for a synthetic event.
-  </acceptance_criteria>
+  <verify>
+    <automated>test 0 -eq "$(grep -r --include='*.py' 'from app' watchdog/ 2>/dev/null | wc -l | tr -d ' ')" && test 0 -eq "$(grep -r --include='*.py' 'from agent' watchdog/ 2>/dev/null | wc -l | tr -d ' ')" && pytest tests/unit/test_watchdog_main.py tests/unit/test_watchdog_logging.py -q --tb=short</automated>
+  </verify>
+  <done>No `from app` / `from agent` imports under `watchdog/`; logging configures before Sentry; monitor emits structlog JSON with required keys; `test_watchdog_main.py` and `test_watchdog_logging.py` pass.</done>
 </task>
 
 <task type="auto">
   <name>Task 2: Health endpoints — observable DB / monitor state (PLAT-06)</name>
+  <files>README.md, app/main.py, agent/main.py, watchdog/main.py, tests/unit/test_app_main.py, tests/unit/test_agent_main.py, tests/unit/test_watchdog_main.py</files>
   <read_first>
     - `app/main.py`, `app/db.py` (`get_engine` or session execute)
     - `agent/main.py` (whether agent should check DB—uses app DB)
@@ -99,14 +106,15 @@ Constraint **C-07**: `watchdog` MUST NOT import `app` or `agent`. Watchdog confi
   <action>
     **Pipeline `app/main.py`:** Implement async health handler that attempts a cheap DB check (e.g. `SELECT 1` via `async_engine.connect()` or session) with timeout; include JSON fields: `status` (`ok` if DB up, `degraded` if DB down—define clearly), `database` (`connected`/`unreachable`). Default HTTP status: keep **200** for process alive if Railway treats non-200 as restart (align with `01-RESEARCH.md` open question—prefer 200 + `status: degraded` to avoid restart loops; document in README). **Agent:** add same `database` check if agent uses shared DB. **Watchdog:** add `monitor` field (`running`/`stopped` or `loop` last tick if implemented minimally via module-level flag set in loop). Do not import `app` in watchdog—use raw SQLAlchemy async engine from env like `monitor.py` for DB check optional or omit DB field for watchdog if no shared schema need—prefer `monitor: "active"` based on asyncio task state without querying pipeline tables. Ensure unhealthy is **distinguishable** in JSON per roadmap.
   </action>
-  <acceptance_criteria>
-    - `pytest tests/unit/test_app_main.py tests/unit/test_agent_main.py tests/unit/test_watchdog_main.py -q --tb=short` passes with updated response shape assertions.
-    - Health JSON includes at minimum: pipeline `{ "status", "database" }`; document field meanings in test docstrings or README health subsection.
-  </acceptance_criteria>
+  <verify>
+    <automated>pytest tests/unit/test_app_main.py tests/unit/test_agent_main.py tests/unit/test_watchdog_main.py -q --tb=short</automated>
+  </verify>
+  <done>Each service `/health` JSON distinguishes dependency state (pipeline/agent: `status` + `database`; watchdog: `monitor` or equivalent); HTTP remains 200 with degraded semantics unless README documents a deliberate 503 policy; unit tests assert response shapes.</done>
 </task>
 
 <task type="auto">
   <name>Task 3: Reconcile Sentry init with Settings for app/agent; env-only for watchdog (PLAT-02, PLAT-08)</name>
+  <files>app/main.py, agent/main.py, watchdog/main.py, tests/unit/test_app_main.py, tests/unit/test_agent_main.py, tests/unit/test_watchdog_main.py, tests/unit/test_sentry_entrypoints.py</files>
   <read_first>
     - `app/main.py`, `agent/main.py`, `app/config.py`
     - `tests/unit/test_config.py` (env patterns for `Settings`)
@@ -115,12 +123,10 @@ Constraint **C-07**: `watchdog` MUST NOT import `app` or `agent`. Watchdog confi
   <action>
     In `app/main.py` and `agent/main.py`: instantiate `Settings()` **before** `sentry_sdk.init` and pass `settings.SENTRY_DSN` to `sentry_sdk.init(dsn=..., send_default_pii=False)`. Remove redundant `os.environ.get("SENTRY_DSN", "")` for init in those files. Ensure import order avoids loading heavy routers before settings validation fails. **Watchdog:** keep `os.environ.get("SENTRY_DSN", "")` only (C-07); after Task 1, Sentry init follows `configure_logging()`. Extend unit tests so **all three** entrypoints prove Sentry wiring: patch `sentry_sdk.init` and import/reload the FastAPI app module (or call a documented factory) such that `init` runs once per process story—app/agent assert DSN matches `Settings()` when env is set; watchdog asserts `init` receives env DSN string. Do not send real events. Missing `SENTRY_DSN` must still fail fast when constructing `Settings()` for app/agent (existing `test_config.py` behavior preserved).
   </action>
-  <acceptance_criteria>
-    - `pytest tests/unit/test_config.py tests/unit/test_app_main.py tests/unit/test_agent_main.py tests/unit/test_watchdog_main.py -q --tb=short` passes.
-    - `grep -n "sentry_sdk.init" app/main.py agent/main.py watchdog/main.py`
-    - `grep "os.environ.get(\"SENTRY_DSN\"" app/main.py agent/main.py` returns no matches (watchdog may still use this pattern).
-    - At least one test file asserts `sentry_sdk.init` was called for each of the three services (grep `sentry_sdk` in the three test modules or a new `tests/unit/test_sentry_entrypoints.py`).
-  </acceptance_criteria>
+  <verify>
+    <automated>test -z "$(grep 'os.environ.get("SENTRY_DSN"' app/main.py agent/main.py 2>/dev/null || true)" && pytest tests/unit/test_config.py tests/unit/test_app_main.py tests/unit/test_agent_main.py tests/unit/test_watchdog_main.py tests/unit/test_sentry_entrypoints.py -q --tb=short</automated>
+  </verify>
+  <done>App/agent call `sentry_sdk.init` with `Settings().SENTRY_DSN` and `send_default_pii=False`; watchdog uses env DSN only; no `os.environ.get("SENTRY_DSN"` in app/agent mains; tests cover all three entrypoints plus preserved `Settings` validation.</done>
 </task>
 
 </tasks>
