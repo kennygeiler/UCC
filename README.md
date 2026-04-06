@@ -29,6 +29,12 @@ There is no lockfile; reproducibility relies on `pyproject.toml` lower bounds.
 pytest
 ```
 
+Default / PR CI runs **`pytest -m "not slow"`** (see `.github/workflows/ci.yml`) so network-heavy scraper smokes are excluded. Run slow smokes locally or via the scheduled workflow:
+
+```bash
+pytest tests/smoke/ -m slow -v
+```
+
 Unit tests use mocked DB settings via `tests/conftest.py`. Integration tests (`@pytest.mark.integration`) need a live Postgres and `DATABASE_URL` (see `tests/integration/`).
 
 ## Migrations
@@ -41,7 +47,7 @@ alembic upgrade head
 
 ## CI parity
 
-GitHub Actions runs the same editable install, applies `alembic upgrade head` against a **Postgres service**, then runs `pytest` with the same `DATABASE_URL` / `SENTRY_DSN` pattern as local development.
+GitHub Actions runs the same editable install, applies `alembic upgrade head` against a **Postgres service**, then runs `pytest -m "not slow"` with the same `DATABASE_URL` / `SENTRY_DSN` pattern as local development.
 
 ## Health endpoints
 

@@ -12,9 +12,7 @@ filings within a rolling date window.
 
 from datetime import datetime, timedelta, timezone
 
-from playwright.async_api import async_playwright
-
-from app.scrapers.base import BaseScraper
+from app.scrapers.playwright_base import PlaywrightBaseScraper
 from app.scrapers.parsers import parse_date
 from app.logging import get_logger
 
@@ -39,11 +37,12 @@ _SEARCH_TERMS = [
 _LOOKBACK_DAYS = 3
 
 
-class CaliforniaScraper(BaseScraper):
+class CaliforniaScraper(PlaywrightBaseScraper):
     """Scraper for California Secretary of State UCC filings.
 
-    Uses Playwright to pass the Incapsula WAF, then calls the SOS
-    JSON API to retrieve recent Financing Statement filings.
+    Subclasses :class:`PlaywrightBaseScraper` and uses
+    :meth:`PlaywrightBaseScraper.playwright_chromium_session` for the
+    WAF + in-browser JSON API flow (no duplicate ``async_playwright`` entry).
     """
 
     @property
@@ -103,20 +102,9 @@ class CaliforniaScraper(BaseScraper):
         seen_filing_numbers: set[str] = set()
         all_filings: list[dict] = []
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-            )
-            page = await context.new_page()
+        async with self.playwright_chromium_session(
+            launch_args=["--disable-blink-features=AutomationControlled"],
+        ) as page:
             await page.add_init_script(
                 "Object.defineProperty(navigator, 'webdriver', "
                 "{ get: () => undefined });"
@@ -157,8 +145,6 @@ class CaliforniaScraper(BaseScraper):
                     logger.warning(
                         "search_term_failed", term=term, error=str(exc)
                     )
-
-            await browser.close()
 
         self.rate_limiter.record_success(self.state_code)
         logger.info(

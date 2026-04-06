@@ -6,6 +6,10 @@ so simple HTTP requests won't work.  This scraper uses Playwright to:
 2. Select "Organization" search type + "Status Report" output.
 3. Search for common secured-party names to get broad filing coverage.
 4. Parse the results GridView and paginate through all pages.
+
+**Playwright consolidation:** Not using ``PlaywrightBaseScraper`` — WebForms +
+multi-page GridView flow is too coupled for the shared base ``_fetch`` contract;
+keep isolated until a proven shared primitive exists (see ADR-011).
 """
 
 from playwright.async_api import async_playwright

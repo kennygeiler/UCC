@@ -18,12 +18,12 @@
 
 ### Scraper engine (M2)
 
-- [ ] **SCRAPE-01**: Tiered scraper framework supports httpx and Playwright paths with per-state registration and rate limits (delay, jitter, backoff).
-- [ ] **SCRAPE-02**: Tier 1 state scrapers ingest UCC filings into `ucc_filings` with scraper run audit rows.
-- [ ] **SCRAPE-03**: Tier 2 and Tier 3 coverage meets master-plan breadth targets with tests/smokes as specified.
-- [ ] **SCRAPE-04**: APScheduler (or equivalent) runs scrape jobs on tier-appropriate cadence.
-- [ ] **SCRAPE-05**: HTML parsing layer normalizes SOS responses without exceeding maintainability limits (C-01).
-- [ ] **SCRAPE-06**: Smoke tests exist per state scraper on the scheduled profile (not necessarily on every PR).
+- [x] **SCRAPE-01**: Tiered scraper framework supports httpx and Playwright paths with per-state registration and rate limits (delay, jitter, backoff).
+- [x] **SCRAPE-02**: Tier 1 state scrapers ingest UCC filings into `ucc_filings` with scraper run audit rows.
+- [x] **SCRAPE-03**: Tier 2 and Tier 3 coverage meets master-plan breadth targets with tests/smokes as specified.
+- [x] **SCRAPE-04**: APScheduler (or equivalent) runs scrape jobs on tier-appropriate cadence.
+- [x] **SCRAPE-05**: HTML parsing layer normalizes SOS responses without exceeding maintainability limits (C-01).
+- [x] **SCRAPE-06**: Smoke tests exist per state scraper on the scheduled profile (not necessarily on every PR).
 
 ### MCA detection and scoring (M3)
 

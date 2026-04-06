@@ -1,15 +1,19 @@
 """Tests for the scraper registry."""
 
+import pytest
+
 from app.scrapers.base import BaseScraper
 from app.scrapers.registry import (
     SCRAPER_REGISTRY,
     get_scraper_class,
     get_states_by_tier,
+    schedulable_state_codes,
 )
 
 
 EXPECTED_TIER1 = ["CA", "TX", "FL", "NY", "NJ", "GA", "IL", "PA", "OH", "MD"]
 EXPECTED_TIER3 = ["NH", "RI", "DE", "HI", "NV", "UT"]
+EXPECTED_TIER4 = ["DC", "NYC"]
 
 
 def test_registry_has_all_tier1_states():
@@ -18,9 +22,9 @@ def test_registry_has_all_tier1_states():
         assert state in SCRAPER_REGISTRY, f"{state} missing from registry"
 
 
-def test_registry_has_40_entries():
-    """Registry should have 40 entries (10 T1 + 24 T2 + 6 T3)."""
-    assert len(SCRAPER_REGISTRY) == 40
+def test_registry_has_42_entries():
+    """Registry: 40 production tiers + 2 Tier 4 stubs."""
+    assert len(SCRAPER_REGISTRY) == 42
 
 
 def test_tier_counts():
@@ -28,6 +32,13 @@ def test_tier_counts():
     assert len(get_states_by_tier(1)) == 10
     assert len(get_states_by_tier(2)) == 24
     assert len(get_states_by_tier(3)) == 6
+    assert len(get_states_by_tier(4)) == 2
+
+
+def test_schedulable_excludes_tier4():
+    """Tier 4 stubs are not in the APScheduler job list."""
+    assert set(schedulable_state_codes()) & set(EXPECTED_TIER4) == set()
+    assert len(schedulable_state_codes()) == 40
 
 
 def test_all_classes_are_base_scraper_subclasses():
@@ -67,3 +78,11 @@ def test_each_scraper_instantiates():
         scraper = info["class"]()
         assert scraper.state_code == state
         assert scraper.tier == info["tier"]
+
+
+@pytest.mark.asyncio
+async def test_tier4_stub_scrape_is_noop():
+    """Tier 4 scrapers return 0 without network."""
+    for code in EXPECTED_TIER4:
+        scraper = SCRAPER_REGISTRY[code]["class"]()
+        assert await scraper.scrape() == 0

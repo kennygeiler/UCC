@@ -13,6 +13,7 @@ from sqlalchemy import text
 from app.config import Settings
 from app.db import dispose_engine, get_engine
 from app.logging import configure_logging
+from app.scrapers.scheduler import create_scheduler
 
 settings = Settings()
 
@@ -23,9 +24,18 @@ configure_logging()
 
 @asynccontextmanager
 async def lifespan(application: FastAPI):
-    """Manage application lifecycle — dispose DB engine on shutdown."""
-    yield
-    await dispose_engine()
+    """Manage application lifecycle — scheduler, DB engine disposal on shutdown."""
+    scheduler = None
+    if Settings().SCRAPER_SCHEDULER_ENABLED:
+        scheduler = create_scheduler()
+        scheduler.start()
+        application.state.scheduler = scheduler
+    try:
+        yield
+    finally:
+        if scheduler is not None:
+            scheduler.shutdown(wait=True)
+        await dispose_engine()
 
 
 app = FastAPI(title="UCC Pipeline", lifespan=lifespan)

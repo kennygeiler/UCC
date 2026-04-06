@@ -152,19 +152,27 @@ class BaseScraper(ABC):
     async def _finish_run(self, run: ScraperRun, count: int) -> None:
         """Mark a ScraperRun as completed.
 
+        Reloads the row by id in the active session — ``run`` may be detached
+        after ``_start_run`` closed its session.
+
         Args:
-            run: The ScraperRun to update.
+            run: The ScraperRun to update (only ``id`` must be valid).
             count: Number of records found.
         """
         async with get_session() as session:
-            run.finished_at = datetime.now(timezone.utc)
-            run.records_found = count
-            run.status = "completed"
-            session.add(run)
+            row = await session.get(ScraperRun, run.id)
+            if row is None:
+                logger.error("scrape_run_missing", state=self.state_code, run_id=run.id)
+                return
+            row.finished_at = datetime.now(timezone.utc)
+            row.records_found = count
+            row.status = "completed"
         logger.info("scrape_completed", state=self.state_code, records=count)
 
     async def _fail_run(self, run: ScraperRun, exc: Exception) -> None:
         """Mark a ScraperRun as failed.
+
+        Reloads the row by id in the active session — ``run`` may be detached.
 
         Args:
             run: The ScraperRun to update.
@@ -172,8 +180,11 @@ class BaseScraper(ABC):
         """
         self.rate_limiter.record_error(self.state_code)
         async with get_session() as session:
-            run.finished_at = datetime.now(timezone.utc)
-            run.status = "failed"
-            run.error_detail = str(exc)[:500]
-            session.add(run)
+            row = await session.get(ScraperRun, run.id)
+            if row is None:
+                logger.error("scrape_run_missing", state=self.state_code, run_id=run.id)
+                return
+            row.finished_at = datetime.now(timezone.utc)
+            row.status = "failed"
+            row.error_detail = str(exc)[:500]
         logger.error("scrape_failed", state=self.state_code, error=str(exc))

@@ -9,6 +9,10 @@ This scraper uses Playwright to:
 3. Parse the results table (#xhtml_grid) from the returned HTML.
 
 No JSON API is available — results come back as full HTML pages.
+
+**Playwright consolidation:** Not using ``PlaywrightBaseScraper`` — repeated
+form submit + grid parsing per search term; California-style session helper
+does not cover this flow yet.
 """
 
 from playwright.async_api import async_playwright

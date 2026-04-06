@@ -109,3 +109,14 @@
 - **Alternatives**: Redis + Celery (industry standard but adds operational complexity and a second data store on Railway). RabbitMQ (same problem). AWS SQS (violates Railway-only constraint).
 - **Rationale**: At 10K leads/month with daily scraping cadence, Postgres handles job queueing with minimal latency. The SELECT FOR UPDATE SKIP LOCKED pattern is battle-tested for this scale. One fewer service to manage and monitor.
 - **Consequences**: Job throughput limited by Postgres connection pool. Acceptable at MVP scale. If throughput becomes a bottleneck beyond 100K leads/month, Redis can be added later.
+
+---
+
+### ADR-011: Scraper session / ViewState handling deferred per-state
+- **Date**: 2026-04-06
+- **Status**: accepted
+- **Context**: Several state portals (e.g. ASP.NET ViewState, multi-step cookies) use ad hoc session handling inside individual `app/scrapers/states/*.py` modules. A shared helper was considered during the scraper-engine phase.
+- **Decision**: Keep session and ViewState logic in state modules until Tier 2/3 scraper behavior stabilizes. Revisit when two or more states share an identical flow that would benefit from one tested helper.
+- **Alternatives**: Ship a thin `session_context` module now (risk of wrong abstraction). Copy-paste forever (rejected — this ADR sets an explicit exit trigger).
+- **Rationale**: Premature shared abstractions complicate C-01 maintenance. TX/NJ-style flows differ enough that a forced helper would likely sprawl. Tier 4 DC/NYC stubs do not change this.
+- **Consequences**: New states continue to implement cookies/ViewState locally. When consolidating, add targeted unit tests and move only proven shared steps into a new module.

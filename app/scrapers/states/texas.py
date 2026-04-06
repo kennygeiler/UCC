@@ -11,6 +11,9 @@ handles the JS-rendered search results (ListView with paging).
 When the TX SOS UCC Filing Tracker
 (webservices.sos.state.tx.us/ucc_filing_tracker/status.aspx) is available,
 results from that source are merged in as well.
+
+**Playwright consolidation:** Not using ``PlaywrightBaseScraper`` — Harris
+UpdatePanel + SOS tracker merge need bespoke async steps beyond single-URL fetch.
 """
 
 import re

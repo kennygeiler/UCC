@@ -9,7 +9,7 @@ v1 delivery follows the Kiln master-plan dependency chain: platform and data fou
 **Phase Numbering:** Integer phases 1–10 match requirement clusters M1–M10. Decimal phases (e.g. 3.1) are reserved for `/gsd-insert-phase` urgent work.
 
 - [x] **Phase 1: Platform, data & CI** - Installable package, settings, async Postgres, migrations, job queue, health, logging, Sentry across services (completed 2026-04-06)
-- [ ] **Phase 2: Scraper engine** - Tiered httpx/Playwright scrapers, tiers 1–3 coverage, scheduler, parsing, per-state smokes
+- [x] **Phase 2: Scraper engine** - Tiered httpx/Playwright scrapers, tiers 1–3 coverage, scheduler, parsing, per-state smokes (completed 2026-04-06)
 - [ ] **Phase 3: MCA detection & scoring** - Alias matching, hot/warm/cold scoring, canonical debtor fields, nightly alias job, tests
 - [ ] **Phase 4: Enrichment** - Waterfall executor, persistent cache, circuit breaker HALT, retry queue, contracts, partial-fail correctness
 - [ ] **Phase 5: Compliance gate** - Four-layer gate, internal DNC, DataMerch fallback, external layers, no bypass, negative tests, audit-safe logs
@@ -151,7 +151,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Platform, data & CI | 0/3 | Complete    | 2026-04-06 |
-| 2. Scraper engine | 0/TBD | Not started | - |
+| 2. Scraper engine | 4/4 | Complete    | 2026-04-06 |
 | 3. MCA detection & scoring | 0/TBD | Not started | - |
 | 4. Enrichment | 0/TBD | Not started | - |
 | 5. Compliance gate | 0/TBD | Not started | - |

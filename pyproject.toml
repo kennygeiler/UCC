@@ -45,4 +45,6 @@ asyncio_mode = "auto"
 testpaths = ["tests"]
 markers = [
     "integration: tests that require a live PostgreSQL (DATABASE_URL)",
+    "slow: tests that hit the network or need Playwright/browser (excluded from default CI)",
+    "smoke: scheduled-profile scraper sanity checks (often combined with slow)",
 ]

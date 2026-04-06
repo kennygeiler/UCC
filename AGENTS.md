@@ -58,6 +58,11 @@ UCC Lead Generation Platform -- a Python 3.12+ automated pipeline that scrapes p
 - Watchdog imports nothing from app/ or agent/ (C-07).
 - All config via `app.config` (pydantic-settings), never raw os.environ.
 
+### Scraper scheduler (pipeline)
+
+- **`SCRAPER_SCHEDULER_ENABLED`** (default `true`): when `true`, `app.main` lifespan starts APScheduler from `app.scrapers.scheduler.create_scheduler()` and shuts it down cleanly. Tests set this to `false` via `tests/conftest.py` so background jobs do not run under pytest.
+- **Playwright:** browser-based scrapers need Chromium installed in the runtime image (`playwright install chromium` or an equivalent Dockerfile step). CI does not install browsers by default; scheduled smokes may add it when needed.
+
 ### Database
 - SQLAlchemy 2.0 async with asyncpg driver.
 - All 13 tables in one Postgres instance.

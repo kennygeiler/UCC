@@ -45,6 +45,10 @@ from app.scrapers.states.nevada import NevadaScraper
 from app.scrapers.states.new_hampshire import NewHampshireScraper
 from app.scrapers.states.rhode_island import RhodeIslandScraper
 from app.scrapers.states.utah import UtahScraper
+from app.scrapers.states.tier4_stubs import (
+    DistrictColumbiaStubScraper,
+    NewYorkCityStubScraper,
+)
 
 # Explicit mapping — no dynamic imports (P-019)
 SCRAPER_REGISTRY: dict[str, dict] = {
@@ -91,7 +95,22 @@ SCRAPER_REGISTRY: dict[str, dict] = {
     "HI": {"class": HawaiiScraper, "tier": 3},
     "NV": {"class": NevadaScraper, "tier": 3},
     "UT": {"class": UtahScraper, "tier": 3},
+    # Tier 4 — placeholders only (no scheduler jobs; see schedulable_state_codes)
+    "DC": {"class": DistrictColumbiaStubScraper, "tier": 4},
+    "NYC": {"class": NewYorkCityStubScraper, "tier": 4},
 }
+
+# Tiers included in APScheduler (Tier 4 stubs are registry-only).
+_MAX_SCHEDULABLE_TIER = 3
+
+
+def schedulable_state_codes() -> list[str]:
+    """State codes that receive interval scrape jobs (excludes Tier 4 stubs)."""
+    return [
+        code
+        for code, info in SCRAPER_REGISTRY.items()
+        if info["tier"] <= _MAX_SCHEDULABLE_TIER
+    ]
 
 
 def get_scraper_class(state_code: str) -> type | None:
@@ -108,6 +127,6 @@ def get_states_by_tier(tier: int) -> list[str]:
     """Return all state codes for a given tier.
 
     Args:
-        tier: Tier number (1, 2, or 3).
+        tier: Tier number (1–4). Tier 4 is stub-only (DC, NYC).
     """
     return [code for code, info in SCRAPER_REGISTRY.items() if info["tier"] == tier]

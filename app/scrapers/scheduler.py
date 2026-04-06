@@ -3,14 +3,12 @@
 Tier 1: daily, Tier 2: every 36 hours, Tier 3: every 48 hours.
 """
 
-import asyncio
-
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from app.logging import get_logger
 from app.scrapers.rate_limiter import RateLimiter
-from app.scrapers.registry import SCRAPER_REGISTRY
+from app.scrapers.registry import SCRAPER_REGISTRY, schedulable_state_codes
 
 logger = get_logger("scheduler")
 
@@ -45,7 +43,8 @@ def create_scheduler() -> AsyncIOScheduler:
 
     tier_intervals = {1: 24, 2: 36, 3: 48}
 
-    for state_code, info in SCRAPER_REGISTRY.items():
+    for state_code in schedulable_state_codes():
+        info = SCRAPER_REGISTRY[state_code]
         hours = tier_intervals.get(info["tier"], 48)
         scheduler.add_job(
             run_scraper,
@@ -56,5 +55,6 @@ def create_scheduler() -> AsyncIOScheduler:
             replace_existing=True,
         )
 
-    logger.info("scheduler_configured", total_jobs=len(SCRAPER_REGISTRY))
+    n = len(schedulable_state_codes())
+    logger.info("scheduler_configured", total_jobs=n, tier4_excluded=True)
     return scheduler

@@ -38,6 +38,9 @@ class Settings(BaseSettings):
     # Proxy rotation (Tier-3 states)
     PROXY_URL: str | None = None
 
+    # Pipeline: start APScheduler for tiered scrapes (disable in tests via env)
+    SCRAPER_SCHEDULER_ENABLED: bool = True
+
     # Self-healing agent
     ANTHROPIC_API_KEY: str | None = None
 

@@ -1,19 +1,38 @@
-"""Smoke tests hitting live state SOS portals.
+"""Smoke tests for scraper registry (SCRAPE-06).
 
-Marked with pytest.mark.slow — excluded from CI, run manually or on schedule.
-Usage: pytest tests/smoke/ -m slow -v
+Fast smokes (``@pytest.mark.smoke`` without ``slow``): every tier 1–3 state has a
+valid ``build_search_url()`` — no network.
+
+Live portal checks (``@pytest.mark.slow`` + ``smoke``): Tier 1 only; run on a
+schedule or locally: ``pytest tests/smoke/ -m \"slow\" -v``.
+
+PR CI runs ``pytest -m \"not slow\"`` so slow tests are excluded by default.
 """
 
 import pytest
 
-from app.scrapers.registry import SCRAPER_REGISTRY, get_states_by_tier
+from app.scrapers.registry import SCRAPER_REGISTRY, schedulable_state_codes
+
+
+@pytest.mark.smoke
+@pytest.mark.parametrize("state_code", schedulable_state_codes())
+def test_build_search_url_for_every_schedulable_state(state_code):
+    """Each production scraper exposes an https search URL (no HTTP request)."""
+    entry = SCRAPER_REGISTRY[state_code]
+    scraper = entry["class"]()
+    url = scraper.build_search_url()
+    assert url.startswith("https://"), f"{state_code}: invalid URL scheme: {url!r}"
+    assert len(url) > 12, f"{state_code}: URL unexpectedly short"
 
 
 @pytest.mark.slow
-@pytest.mark.asyncio
-@pytest.mark.parametrize("state_code", get_states_by_tier(1))
-async def test_tier1_scraper_fetches(state_code):
-    """Verify Tier 1 scrapers can fetch from live portals."""
+@pytest.mark.smoke
+@pytest.mark.parametrize(
+    "state_code",
+    [c for c, i in SCRAPER_REGISTRY.items() if i["tier"] == 1],
+)
+def test_tier1_live_search_url_reachable(state_code):
+    """Optional live check: Tier 1 ``build_search_url`` looks like a real portal URL."""
     entry = SCRAPER_REGISTRY[state_code]
     scraper = entry["class"]()
     url = scraper.build_search_url()
