@@ -30,8 +30,9 @@ class Settings(BaseSettings):
     TWILIO_ACCOUNT_SID: str | None = None
     TWILIO_AUTH_TOKEN: str | None = None
 
-    # Compliance API keys
+    # Compliance API keys (C-15: optional fail-closed when DATAMERCH key missing)
     DATAMERCH_API_KEY: str | None = None
+    COMPLIANCE_FAIL_CLOSED_WITHOUT_DATAMERCH: bool = False
     DNC_SCRUB_API_KEY: str | None = None
     BLACKLIST_API_KEY: str | None = None
 

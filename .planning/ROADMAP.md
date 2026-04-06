@@ -12,7 +12,7 @@ v1 delivery follows the Kiln master-plan dependency chain: platform and data fou
 - [x] **Phase 2: Scraper engine** - Tiered httpx/Playwright scrapers, tiers 1–3 coverage, scheduler, parsing, per-state smokes (completed 2026-04-06)
 - [x] **Phase 3: MCA detection & scoring** - Alias matching, hot/warm/cold scoring, canonical debtor fields, nightly alias job, tests (completed 2026-04-06)
 - [x] **Phase 4: Enrichment** - Waterfall executor, persistent cache, circuit breaker HALT, retry queue, contracts, partial-fail correctness (completed 2026-04-06)
-- [ ] **Phase 5: Compliance gate** - Four-layer gate, internal DNC, DataMerch fallback, external layers, no bypass, negative tests, audit-safe logs
+- [x] **Phase 5: Compliance gate** - Four-layer gate, internal DNC, DataMerch fallback, external layers, no bypass, negative tests, audit-safe logs (completed 2026-04-06)
 - [ ] **Phase 6: Dedup, export & GHL** - Cross-state dedup, adapter-only campaign IO, GHL upsert + fields, CSV fallback, webhook, recycler, tests, no stray GHL imports
 - [ ] **Phase 7: Manager dashboard** - Plain-language ops view, HTMX refresh, charts, CSV upload tier path, gated access, route tests
 - [ ] **Phase 8: Self-healing agent** - LangGraph cycle with checkpointing, anomaly detection, GitHub repair path, email alerts, heartbeat, guardrails, node tests
@@ -154,7 +154,7 @@ Plans:
 | 2. Scraper engine | 4/4 | Complete    | 2026-04-06 |
 | 3. MCA detection & scoring | 4/4 | Complete    | 2026-04-06 |
 | 4. Enrichment | 4/4 | Complete    | 2026-04-06 |
-| 5. Compliance gate | 0/TBD | Not started | - |
+| 5. Compliance gate | 4/4 | Complete    | 2026-04-06 |
 | 6. Dedup, export & GHL | 0/TBD | Not started | - |
 | 7. Manager dashboard | 0/TBD | Not started | - |
 | 8. Self-healing agent | 0/TBD | Not started | - |

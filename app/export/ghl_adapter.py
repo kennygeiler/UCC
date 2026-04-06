@@ -2,6 +2,7 @@
 
 import httpx
 
+from app.compliance.export_guard import require_compliance_cleared
 from app.config import Settings
 from app.export.adapter import CampaignPlatformAdapter
 from app.logging import get_logger
@@ -42,6 +43,7 @@ class GHLAdapter(CampaignPlatformAdapter):
         Returns:
             GHL contact ID.
         """
+        require_compliance_cleared(lead_data)
         payload = {
             "locationId": self.location_id,
             "phone": lead_data.get("phone"),

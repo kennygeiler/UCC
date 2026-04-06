@@ -23,6 +23,7 @@ Capabilities evidenced by the current tree and `.planning/codebase/ARCHITECTURE.
 - ✓ Operational services: LangGraph-style agent (`agent/`), independent watchdog (`watchdog/`) — existing
 - ✓ MCA detection and scoring (Phase 3): state-scoped position counts, fuzzy/shell/collateral matching, filing-scoped lead pipeline with `debtor_name_normalized`, `mca_tier`, `source_filing_id`, optional nightly alias updater — tested.
 - ✓ Enrichment (Phase 4): waterfall + breakers, aggregate Postgres cache, rolling error-rate HALT, retry backoff + scheduler job, normalized vendor mapping + completeness bar, contract fixtures — tested.
+- ✓ Compliance gate (Phase 5): four-layer ordered gate with `compliance_checks` audit, persisted `Lead.compliance_status`, internal DNC soft deactivate + reversal audit, DataMerch fail-open / optional fail-closed, safe HTTP logging, export guard on adapters — tested.
 
 ### Active
 

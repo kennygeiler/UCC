@@ -44,13 +44,13 @@
 
 ### Compliance gate (M5)
 
-- [ ] **COMPLY-01**: Gate runs four layers in order; any failure permanently blocks export (C-02).
-- [ ] **COMPLY-02**: Internal DNC is checked before paid compliance API usage; entries are append-only with audited reversal only (C-12).
-- [ ] **COMPLY-03**: DataMerch client runs with documented fallback when API key absent (C-15) with warning visibility.
-- [ ] **COMPLY-04**: DNC.com/CCC and Blacklist Alliance layers execute and log pass/fail to `compliance_checks`.
-- [ ] **COMPLY-05**: Static analysis / tests demonstrate no bypass path from export to skipping the gate.
-- [ ] **COMPLY-06**: Negative tests cover known DNC and litigator scenarios per M10 language.
-- [ ] **COMPLY-07**: Compliance logging supports audit review without exposing secrets.
+- [x] **COMPLY-01**: Gate runs four layers in order; any failure permanently blocks export (C-02).
+- [x] **COMPLY-02**: Internal DNC is checked before paid compliance API usage; entries are append-only with audited reversal only (C-12).
+- [x] **COMPLY-03**: DataMerch client runs with documented fallback when API key absent (C-15) with warning visibility.
+- [x] **COMPLY-04**: DNC.com/CCC and Blacklist Alliance layers execute and log pass/fail to `compliance_checks`.
+- [x] **COMPLY-05**: Static analysis / tests demonstrate no bypass path from export to skipping the gate.
+- [x] **COMPLY-06**: Negative tests cover known DNC and litigator scenarios per M10 language.
+- [x] **COMPLY-07**: Compliance logging supports audit review without exposing secrets.
 
 ### Dedup, export, GHL (M6)
 
@@ -149,13 +149,13 @@ Deferred enhancements (not in current v1 roadmap):
 | ENRICH-04 | 4 | Complete |
 | ENRICH-05 | 4 | Complete |
 | ENRICH-06 | 4 | Complete |
-| COMPLY-01 | 5 | Pending |
-| COMPLY-02 | 5 | Pending |
-| COMPLY-03 | 5 | Pending |
-| COMPLY-04 | 5 | Pending |
-| COMPLY-05 | 5 | Pending |
-| COMPLY-06 | 5 | Pending |
-| COMPLY-07 | 5 | Pending |
+| COMPLY-01 | 5 | Complete |
+| COMPLY-02 | 5 | Complete |
+| COMPLY-03 | 5 | Complete |
+| COMPLY-04 | 5 | Complete |
+| COMPLY-05 | 5 | Complete |
+| COMPLY-06 | 5 | Complete |
+| COMPLY-07 | 5 | Complete |
 | EXPORT-01 | 6 | Pending |
 | EXPORT-02 | 6 | Pending |
 | EXPORT-03 | 6 | Pending |

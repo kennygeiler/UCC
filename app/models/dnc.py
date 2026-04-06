@@ -24,6 +24,31 @@ class InternalDNC(Base):
         nullable=False,
     )
     added_by: Mapped[str | None] = mapped_column(Text, nullable=True)
+    is_active: Mapped[bool] = mapped_column(
+        default=True,
+        server_default="true",
+        nullable=False,
+    )
+
+
+class DncReversalAudit(Base):
+    """Manager-only DNC reversal audit (C-12). Does not delete ``internal_dnc`` rows."""
+
+    __tablename__ = "dnc_reversal_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    internal_dnc_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("internal_dnc.id"), nullable=False
+    )
+    reversed_by: Mapped[str] = mapped_column(Text, nullable=False)
+    reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    reversed_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (Index("ix_dnc_reversal_audit_internal_dnc_id", "internal_dnc_id"),)
 
 
 class EnrichmentCache(Base):

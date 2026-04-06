@@ -3,7 +3,12 @@
 from app.models.filing import UCCFiling
 from app.models.lead import Lead
 from app.models.mca_alias import MCAlias
-from app.models.dnc import InternalDNC, EnrichmentCache, ComplianceCheck
+from app.models.dnc import (
+    ComplianceCheck,
+    DncReversalAudit,
+    EnrichmentCache,
+    InternalDNC,
+)
 from app.models.job import JobQueue, EnrichmentRetryQueue
 from app.models.operations import (
     StatePriority,
@@ -18,6 +23,7 @@ __all__ = [
     "Lead",
     "MCAlias",
     "InternalDNC",
+    "DncReversalAudit",
     "EnrichmentCache",
     "ComplianceCheck",
     "JobQueue",

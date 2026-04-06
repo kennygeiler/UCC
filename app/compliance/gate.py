@@ -6,6 +6,7 @@ A lead failing ANY layer is permanently blocked. No override, no soft flag.
 
 from datetime import datetime, timezone
 
+import httpx
 from sqlalchemy import select
 
 from app.db import get_session
@@ -16,6 +17,28 @@ from app.models.lead import Lead
 logger = get_logger("compliance_gate")
 
 
+def _safe_http_error_log(gate: str, exc: Exception) -> None:
+    """Log HTTP client errors without query strings or auth headers (COMPLY-07)."""
+    if isinstance(exc, httpx.HTTPStatusError):
+        req = exc.request
+        url = str(req.url).split("?")[0]
+        logger.error(
+            f"{gate}_http_error",
+            component="compliance_gate",
+            status="error",
+            error_type=type(exc).__name__,
+            context=f"{req.method} {url} status={exc.response.status_code}",
+        )
+        return
+    logger.error(
+        f"{gate}_error",
+        component="compliance_gate",
+        status="error",
+        error_type=type(exc).__name__,
+        context=str(exc)[:200],
+    )
+
+
 async def check_internal_dnc(phone: str | None, email: str | None) -> bool:
     """Layer 1: Check internal DNC list (checked FIRST, before paid APIs).
 
@@ -24,39 +47,60 @@ async def check_internal_dnc(phone: str | None, email: str | None) -> bool:
         email: Email to check.
 
     Returns:
-        True if BLOCKED (on DNC list).
+        True if BLOCKED (on active DNC list).
     """
     if not phone and not email:
         return False
     async with get_session() as session:
-        conditions = []
         if phone:
-            conditions.append(InternalDNC.phone == phone)
+            result = await session.execute(
+                select(InternalDNC.id)
+                .where(
+                    InternalDNC.phone == phone,
+                    InternalDNC.is_active.is_(True),
+                )
+                .limit(1)
+            )
+            if result.scalar_one_or_none() is not None:
+                return True
         if email:
-            conditions.append(InternalDNC.email == email)
-        for cond in conditions:
-            result = await session.execute(select(InternalDNC.id).where(cond).limit(1))
+            result = await session.execute(
+                select(InternalDNC.id)
+                .where(
+                    InternalDNC.email == email,
+                    InternalDNC.is_active.is_(True),
+                )
+                .limit(1)
+            )
             if result.scalar_one_or_none() is not None:
                 return True
     return False
 
 
 async def check_datamerch(debtor_name: str, **kwargs) -> bool:
-    """Layer 2: Check DataMerch for MCA default history.
+    """Layer 2: Check DataMerch for MCA default history (C-15).
 
     Args:
         debtor_name: Business name to check.
 
     Returns:
-        True if BLOCKED (known defaulter or litigator).
+        True if BLOCKED (known defaulter or litigator), or fail-closed when configured.
     """
     from app.config import Settings
+
     settings = Settings()
     if not settings.DATAMERCH_API_KEY:
-        logger.warning("datamerch_unconfigured", detail="Running without DataMerch — fallback mode")
-        return False  # Fallback: allow but log warning (C-15)
+        logger.warning(
+            "datamerch_unconfigured",
+            component="compliance_gate",
+            status="warn",
+            error_type="missing_key",
+            context="datamerch_fallback",
+        )
+        if settings.COMPLIANCE_FAIL_CLOSED_WITHOUT_DATAMERCH:
+            return True
+        return False
 
-    import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -66,10 +110,10 @@ async def check_datamerch(debtor_name: str, **kwargs) -> bool:
             )
             resp.raise_for_status()
             data = resp.json()
-        return data.get("blocked", False)
+        return bool(data.get("blocked", False))
     except Exception as exc:
-        logger.error("datamerch_error", error=str(exc))
-        return False  # Fail open with warning per C-15
+        _safe_http_error_log("datamerch", exc)
+        return False
 
 
 async def check_dnc_scrub(phone: str | None) -> bool:
@@ -84,12 +128,18 @@ async def check_dnc_scrub(phone: str | None) -> bool:
     if not phone:
         return False
     from app.config import Settings
+
     settings = Settings()
     if not settings.DNC_SCRUB_API_KEY:
-        logger.warning("dnc_scrub_unconfigured")
+        logger.warning(
+            "dnc_scrub_unconfigured",
+            component="compliance_gate",
+            status="warn",
+            error_type="missing_key",
+            context="",
+        )
         return False
 
-    import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -99,9 +149,9 @@ async def check_dnc_scrub(phone: str | None) -> bool:
             )
             resp.raise_for_status()
             data = resp.json()
-        return data.get("on_dnc_list", False)
+        return bool(data.get("on_dnc_list", False))
     except Exception as exc:
-        logger.error("dnc_scrub_error", error=str(exc))
+        _safe_http_error_log("dnc_scrub", exc)
         return False
 
 
@@ -117,12 +167,18 @@ async def check_blacklist_alliance(phone: str | None) -> bool:
     if not phone:
         return False
     from app.config import Settings
+
     settings = Settings()
     if not settings.BLACKLIST_API_KEY:
-        logger.warning("blacklist_unconfigured")
+        logger.warning(
+            "blacklist_unconfigured",
+            component="compliance_gate",
+            status="warn",
+            error_type="missing_key",
+            context="",
+        )
         return False
 
-    import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
             resp = await client.get(
@@ -132,9 +188,9 @@ async def check_blacklist_alliance(phone: str | None) -> bool:
             )
             resp.raise_for_status()
             data = resp.json()
-        return data.get("is_litigator", False)
+        return bool(data.get("is_litigator", False))
     except Exception as exc:
-        logger.error("blacklist_error", error=str(exc))
+        _safe_http_error_log("blacklist_alliance", exc)
         return False
 
 
@@ -192,9 +248,19 @@ async def _mark_blocked(lead: Lead, gate_name: str) -> None:
         gate_name: Which gate blocked it.
     """
     async with get_session() as session:
-        lead.compliance_status = f"blocked:{gate_name}"
-        session.add(lead)
-    logger.warning("lead_blocked", lead_id=lead.id, gate=gate_name)
+        row = await session.get(Lead, lead.id)
+        if row is not None:
+            row.compliance_status = f"blocked:{gate_name}"
+            session.add(row)
+    logger.warning(
+        "lead_blocked",
+        component="compliance_gate",
+        status="blocked",
+        error_type="",
+        context=gate_name,
+        lead_id=lead.id,
+        gate=gate_name,
+    )
 
 
 async def _mark_compliant(lead: Lead) -> None:
@@ -204,6 +270,15 @@ async def _mark_compliant(lead: Lead) -> None:
         lead: Lead that passed all gates.
     """
     async with get_session() as session:
-        lead.compliance_status = "cleared"
-        session.add(lead)
-    logger.info("lead_cleared", lead_id=lead.id)
+        row = await session.get(Lead, lead.id)
+        if row is not None:
+            row.compliance_status = "cleared"
+            session.add(row)
+    logger.info(
+        "lead_cleared",
+        component="compliance_gate",
+        status="cleared",
+        error_type="",
+        context="",
+        lead_id=lead.id,
+    )

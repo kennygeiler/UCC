@@ -18,6 +18,7 @@ from app.models import (  # noqa: F401
     Lead,
     MCAlias,
     InternalDNC,
+    DncReversalAudit,
     EnrichmentCache,
     ComplianceCheck,
     JobQueue,

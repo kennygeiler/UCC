@@ -42,6 +42,11 @@ UCC Lead Generation Platform -- a Python 3.12+ automated pipeline that scrapes p
 - `ENRICH_BREAKER_ERROR_WINDOW_SECONDS`, `ENRICH_BREAKER_ERROR_RATE_THRESHOLD`, `ENRICH_RATE_MIN_ATTEMPTS_BEFORE_HALT` — rolling failure-rate window before pybreaker open + HALT.
 - `ENRICH_RETRY_JOB_ENABLED` (default true; tests force false), `ENRICH_RETRY_INTERVAL_MINUTES` — scheduled `enrichment_retry_queue` processor.
 
+### Compliance / DataMerch (C-15)
+- `DATAMERCH_API_KEY` — optional in dev; when unset the DataMerch layer logs `datamerch_unconfigured` and **fail-opens** (not blocked) unless `COMPLIANCE_FAIL_CLOSED_WITHOUT_DATAMERCH=true` (then the layer blocks).
+- Export (`CampaignPlatformAdapter` implementations) calls `require_compliance_cleared` — `lead_data` must include `compliance_status == "cleared"`.
+- Internal DNC is append-only; use `reverse_dnc_block` (audit row) instead of deleting rows (C-12).
+
 ### File Organization
 - `app/` -- Pipeline service (FastAPI). Subpackages: models, scrapers, detection, scoring, enrichment, compliance, dedup, export, recycling, dashboard, scheduler.
 - `agent/` -- Self-healing agent service. Subpackages: nodes.

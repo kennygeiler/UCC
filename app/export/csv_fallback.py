@@ -4,6 +4,7 @@ import csv
 import io
 from datetime import datetime, timezone
 
+from app.compliance.export_guard import require_compliance_cleared
 from app.export.adapter import CampaignPlatformAdapter
 from app.logging import get_logger
 
@@ -30,6 +31,7 @@ class CSVFallbackAdapter(CampaignPlatformAdapter):
         Returns:
             Placeholder contact ID (filename:row).
         """
+        require_compliance_cleared(lead_data)
         timestamp = datetime.now(timezone.utc).strftime("%Y%m%d")
         filepath = f"{self.output_dir}/leads_export_{timestamp}.csv"
         row = {
