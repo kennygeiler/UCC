@@ -43,19 +43,37 @@ def _parse_args() -> argparse.Namespace:
         default=None,
         help="Override max search terms per run (Playwright Tier 1).",
     )
+    parser.add_argument(
+        "--profile",
+        default=None,
+        help="Run only this search profile (NY: secured_party_org_sw, debtor_org_sw, etc.).",
+    )
     return parser.parse_args()
 
 
-def _playwright_quick_settings(state: str, *, max_pages: int | None, max_terms: int | None):
-    from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
+def _playwright_quick_settings(
+    state: str,
+    *,
+    max_pages: int | None,
+    max_terms: int | None,
+    profile_filter: str | None = None,
+):
+    from app.scrapers.playwright_tier1.settings import (
+        PlaywrightScrapeSettings,
+        load_playwright_scrape_settings,
+    )
 
+    base = load_playwright_scrape_settings(state)
     return PlaywrightScrapeSettings(
         max_pages=max_pages if max_pages is not None else 2,
         max_terms=max_terms if max_terms is not None else 3,
         fetch_detail=False,
         mca_term_limit=3,
-        extra_search_terms=(),
+        extra_search_terms=base.extra_search_terms,
         page_cap_per_run=2,
+        search_profiles=base.search_profiles,
+        prefix_terms=base.prefix_terms,
+        profile_filter=profile_filter,
     )
 
 
@@ -93,7 +111,10 @@ async def main() -> int:
         )
         scraper = FloridaScraper(**kwargs)
     elif state in _PLAYWRIGHT_STATES and (
-        args.quick or args.max_pages is not None or args.max_terms is not None
+        args.quick
+        or args.max_pages is not None
+        or args.max_terms is not None
+        or args.profile is not None
     ):
         from app.scrapers.playwright_tier1.settings import (
             PlaywrightScrapeSettings,
@@ -105,6 +126,7 @@ async def main() -> int:
                 state,
                 max_pages=args.max_pages,
                 max_terms=args.max_terms,
+                profile_filter=args.profile,
             )
         else:
             base = load_playwright_scrape_settings(state)
@@ -115,6 +137,9 @@ async def main() -> int:
                 mca_term_limit=base.mca_term_limit,
                 extra_search_terms=base.extra_search_terms,
                 page_cap_per_run=base.page_cap_per_run,
+                search_profiles=base.search_profiles,
+                prefix_terms=base.prefix_terms,
+                profile_filter=args.profile or base.profile_filter,
             )
         kwargs["scrape_settings"] = settings
         scraper = scraper_cls(**kwargs)

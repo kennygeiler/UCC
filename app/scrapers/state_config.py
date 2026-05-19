@@ -45,7 +45,7 @@ TIER1_OPERATOR_NOTES: dict[str, str] = {
     "FL": "REST API deep pagination, secured-party enrichment, checkpoints.",
     "CA": "Playwright + bizfile JSON API; MCA terms; secured_party on API rows; env caps.",
     "TX": "Playwright Harris County + SOS tracker; MCA terms; env row caps.",
-    "NY": "Playwright lien search; MCA terms; pagination; optional detail for secured_party.",
+    "NY": "Multi-profile lien search (secured-party MCA + debtor prefix queue); pagination; detail fetch.",
     "NJ": "Playwright non-certified search; MCA terms; pagination; env caps.",
     "GA": "HTML stub URL not live — needs GA eCorp UCC portal research.",
     "IL": "HTML stub URL not live — needs IL SOS UCC portal research.",
@@ -98,13 +98,27 @@ def tier1_dashboard_row(state_code: str) -> dict:
     """Single row for dashboard Tier 1 table."""
     code = state_code.strip().upper()
     readiness = TIER1_READINESS.get(code, ScraperReadiness.NOT_READY)
-    return {
+    row = {
         "state": code,
         "readiness": readiness.value,
         "runnable": is_tier1_runnable(code),
         "notes": TIER1_OPERATOR_NOTES.get(code, ""),
         "env_prefix": TIER1_ENV_PREFIX.get(code),
     }
+    if code == "NY":
+        try:
+            from app.config import Settings
+            from app.scrapers.playwright_tier1.settings import load_playwright_scrape_settings
+
+            settings = Settings()
+            ny = load_playwright_scrape_settings("NY")
+            row["search_profiles"] = ", ".join(ny.search_profiles)
+            row["notes"] = (
+                f"{row['notes']} Profiles: {row['search_profiles']}."
+            )
+        except Exception:
+            row["search_profiles"] = "secured_party_org_sw, debtor_org_sw"
+    return row
 
 
 def all_tier1_dashboard_rows() -> list[dict]:

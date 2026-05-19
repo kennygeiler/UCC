@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from app.scrapers.base_enriched import PostScrapeScraper
 from app.scrapers.playwright_base import PlaywrightBaseScraper
+from app.scrapers.playwright_tier1.profiles import DEFAULT_LEGACY_PROFILE
 from app.scrapers.playwright_tier1.search_terms import build_search_term_list
 from app.scrapers.playwright_tier1.settings import (
     PlaywrightScrapeSettings,
@@ -34,12 +35,20 @@ class PlaywrightTier1Scraper(PostScrapeScraper, PlaywrightBaseScraper):
         )
 
     async def _load_search_terms(self) -> list[str]:
+        """Legacy single-profile term list (NJ/CA/TX until multi-profile enabled)."""
         s = self.scrape_settings
         return await build_search_term_list(
             mca_limit=s.mca_term_limit,
             extra_terms=s.extra_search_terms,
             max_terms=s.max_terms,
         )
+
+    def _legacy_search_profile(self) -> str:
+        """Default profile name for states without ``*_SCRAPE_SEARCH_PROFILES``."""
+        profiles = self.scrape_settings.search_profiles
+        if profiles:
+            return profiles[0]
+        return DEFAULT_LEGACY_PROFILE
 
     async def scrape(self) -> int:
         """Execute scrape with persist + post-scrape pipeline."""

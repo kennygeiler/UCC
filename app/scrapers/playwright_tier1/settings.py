@@ -5,6 +5,14 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from app.config import Settings
+from app.scrapers.playwright_tier1.profiles import (
+    DEFAULT_LEGACY_PROFILE,
+    DEFAULT_NY_SEARCH_PROFILES,
+    NY_SEARCH_PROFILES,
+    default_prefix_terms,
+    parse_prefix_terms,
+    parse_profile_list,
+)
 
 
 @dataclass(frozen=True)
@@ -17,6 +25,9 @@ class PlaywrightScrapeSettings:
     mca_term_limit: int
     extra_search_terms: tuple[str, ...]
     page_cap_per_run: int | None = None
+    search_profiles: tuple[str, ...] = ()
+    prefix_terms: tuple[str, ...] = ()
+    profile_filter: str | None = None
 
 
 def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings:
@@ -32,7 +43,7 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
         if settings is None:
             return default
         state_v = getattr(settings, state_attr, None)
-        if state_v is not None and state_attr in type(settings).model_fields:
+        if state_attr in type(settings).model_fields and state_v is not None:
             return int(state_v)
         return int(getattr(settings, generic_attr, default))
 
@@ -55,15 +66,44 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
             return ()
         return tuple(t.strip() for t in raw.split(",") if t.strip())
 
+    def _search_profiles() -> tuple[str, ...]:
+        if settings is None:
+            return () if code != "NY" else DEFAULT_NY_SEARCH_PROFILES
+        attr = f"{prefix}_SEARCH_PROFILES"
+        if attr in type(settings).model_fields:
+            raw = (getattr(settings, attr) or "").strip()
+            if code == "NY":
+                parsed = parse_profile_list(raw, valid=NY_SEARCH_PROFILES)
+                return parsed or DEFAULT_NY_SEARCH_PROFILES
+            if raw:
+                return tuple(p.strip() for p in raw.split(",") if p.strip())
+        if code == "NY":
+            return DEFAULT_NY_SEARCH_PROFILES
+        return ()
+
+    def _prefix_terms() -> tuple[str, ...]:
+        if settings is None:
+            return default_prefix_terms()
+        attr = f"{prefix}_PREFIX_TERMS"
+        if attr in type(settings).model_fields:
+            raw = getattr(settings, attr) or ""
+            return parse_prefix_terms(str(raw))
+        return default_prefix_terms()
+
     max_pages = _get_int("PLAYWRIGHT_SCRAPE_MAX_PAGES", f"{prefix}_MAX_PAGES", 50)
     max_terms = _get_int("PLAYWRIGHT_SCRAPE_MAX_TERMS", f"{prefix}_MAX_TERMS", 20)
-    mca_limit = _get_int("PLAYWRIGHT_SCRAPE_MCA_TERM_LIMIT", f"{prefix}_MCA_TERM_LIMIT", 20)
+    mca_default = 100 if code == "NY" else 20
+    mca_limit = _get_int("PLAYWRIGHT_SCRAPE_MCA_TERM_LIMIT", f"{prefix}_MCA_TERM_LIMIT", mca_default)
     fetch_detail = _get_bool("PLAYWRIGHT_SCRAPE_FETCH_DETAIL", f"{prefix}_FETCH_DETAIL", True)
     page_cap = None
     if settings and f"{prefix}_PAGE_CAP_PER_RUN" in type(settings).model_fields:
         raw_cap = getattr(settings, f"{prefix}_PAGE_CAP_PER_RUN")
         if raw_cap is not None:
             page_cap = int(raw_cap)
+
+    profiles = _search_profiles()
+    if not profiles and code not in ("NY",):
+        profiles = (DEFAULT_LEGACY_PROFILE,)
 
     return PlaywrightScrapeSettings(
         max_pages=max_pages,
@@ -72,4 +112,7 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
         mca_term_limit=mca_limit,
         extra_search_terms=_terms(),
         page_cap_per_run=page_cap,
+        search_profiles=profiles,
+        prefix_terms=_prefix_terms(),
+        profile_filter=None,
     )

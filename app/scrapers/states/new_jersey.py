@@ -112,7 +112,8 @@ class NewJerseyScraper(PlaywrightTier1Scraper):
         await page.wait_for_load_state("networkidle", timeout=60_000)
         await page.wait_for_timeout(1_000)
 
-        completed = await get_page_checkpoint(self.state_code, org_name)
+        profile = self._legacy_search_profile()
+        completed = await get_page_checkpoint(self.state_code, profile, org_name)
         for _ in range(completed):
             if not await aspnet_grid_next_page(page, _GRID_SELECTOR):
                 break
@@ -124,7 +125,7 @@ class NewJerseyScraper(PlaywrightTier1Scraper):
         while page_index < max_pages:
             page_index += 1
             all_rows.extend(await self._parse_grid(page))
-            await save_page_checkpoint(self.state_code, org_name, page_index)
+            await save_page_checkpoint(self.state_code, profile, org_name, page_index)
             if page_index >= max_pages:
                 break
             if not await aspnet_grid_next_page(page, _GRID_SELECTOR):

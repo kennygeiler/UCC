@@ -34,7 +34,7 @@ Open **http://localhost:8000/dashboard/** for Tier 1 scrape triggers, stats, and
 | **FL** | Ready | REST API deep pagination, secured-party enrichment, checkpoints |
 | **CA** | Playwright | `playwright install chromium` — bizfile JSON API after WAF |
 | **TX** | Playwright | Harris County + optional SOS tracker |
-| **NY** | Playwright | MCA terms, pagination, optional detail for secured_party — see [playwright-tier1-scrape-strategy.md](docs/playwright-tier1-scrape-strategy.md) |
+| **NY** | Playwright | Multi-profile (secured-party MCA + debtor prefix), pagination, detail — [new-york-scale-strategy.md](docs/new-york-scale-strategy.md) |
 | **NJ** | Playwright | MCA terms, pagination, env caps (same doc) |
 | **GA, IL, OH, MD, PA** | Not implemented | Registered in dashboard; scrape refused (no fake HTML stub runs) |
 
@@ -45,9 +45,11 @@ Runnable states run the same post-scrape pipeline as Florida: classify filings �
 python scripts/run_state_scrape.py --state FL
 python scripts/run_state_scrape.py --state CA   # needs Playwright + Chromium
 python scripts/run_state_scrape.py --state NY --quick
-NY_SCRAPE_MAX_PAGES=2 python scripts/run_state_scrape.py --state NY --max-terms 3
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw NY_SCRAPE_MAX_TERMS=3 NY_SCRAPE_MAX_PAGES=2 \
+  python scripts/run_state_scrape.py --state NY
 
-# Playwright Tier 1 strategy: docs/playwright-tier1-scrape-strategy.md
+# NY scale strategy: docs/new-york-scale-strategy.md
+# Playwright Tier 1 overview: docs/playwright-tier1-scrape-strategy.md
 
 # All ready Tier 1 (FL, CA, TX, NY, NJ) sequentially
 python scripts/run_tier1_scrape.py

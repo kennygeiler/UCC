@@ -1,9 +1,20 @@
 """New York SOS UCC filing scraper.
 
-Cenuity Online Lien Search at ucc-efiling.dos.ny.gov (public, no login via home link).
+Cenuity Online Lien Search at ucc-efiling.dos.ny.gov (public via home → Lien Search).
 
-Uses :mod:`app.scrapers.playwright_tier1` for MCA search terms, pagination, checkpoints,
-and optional detail enrichment for ``secured_party``.
+Portal recon (May 2026 — verify after portal upgrades):
+  - Entry: home → ``a:has-text("Lien Search")`` → MVC search form ``frm_UCCSearch``.
+  - Party radios: ``#rdbDebtor`` (debtor) / ``#rdbSecuredParty`` (secured party);
+    VM hook: ``uccSearchVM.RadioButtonClick('DebtorName'|'SecuredPartyName')``.
+  - Org type: ``#rdbOrg`` + ``DebtorTypeClick('Organization')``.
+  - Match logic: ``#ddlSearchLogic`` — ``SW`` (starts with), ``BW`` (begins with).
+  - Org name: ``#UCCSearch_UCCSerach_txtOrgName`` (portal typo preserved).
+  - Results grid: ``#xhtml_grid``; pager footer ``Page N / M``.
+  - Detail: first-column lien link → detail table with Secured Party / Filing Date rows.
+  - No statewide empty-text index (unlike FL REST); volume requires many profile|term sweeps.
+
+Uses :mod:`app.scrapers.playwright_tier1` for multi-profile search, prefix queue,
+pagination, checkpoints, and optional detail enrichment.
 """
 
 from __future__ import annotations
@@ -14,6 +25,18 @@ from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
 from app.scrapers.playwright_tier1.checkpoints import get_page_checkpoint, save_page_checkpoint
 from app.scrapers.playwright_tier1.detail_fetch import fetch_secured_party_from_detail
 from app.scrapers.playwright_tier1.pagination import xhtml_grid_next_page
+from app.scrapers.playwright_tier1.prefix_queue import (
+    get_prefix_offset,
+    save_prefix_offset,
+    slice_prefix_terms,
+)
+from app.scrapers.playwright_tier1.profiles import (
+    NY_SEARCH_PROFILES,
+    PartySearchMode,
+    SearchProfileSpec,
+    TermSource,
+)
+from app.scrapers.playwright_tier1.search_terms import build_search_term_list
 from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 
 logger = get_logger("ny_scraper")
@@ -21,25 +44,61 @@ logger = get_logger("ny_scraper")
 _GRID = "#xhtml_grid"
 _COL_LIEN_NUMBER = 0
 _COL_DEBTOR_NAME = 3
+_COL_SECURED_PARTY = 7
 _COL_FILING_DATE = 6
 
 _EXTRACT_GRID_JS = """() => {
     const table = document.querySelector('#xhtml_grid');
-    if (!table) return [];
+    if (!table) return { headers: [], rows: [] };
+    const headers = [];
+    const headerRow = table.querySelector('thead tr');
+    if (headerRow) {
+        headerRow.querySelectorAll('th, td').forEach(cell => {
+            headers.push((cell.innerText || '').trim().toLowerCase());
+        });
+    }
     const rows = [];
     table.querySelectorAll('tbody tr').forEach(tr => {
         const cells = [];
         tr.querySelectorAll('td').forEach(td => cells.push(td.textContent.trim()));
         rows.push(cells);
     });
-    return rows;
+    return { headers, rows };
 }"""
 
 _HAS_GRID_JS = "() => !!document.querySelector('#xhtml_grid tbody tr')"
 
+_SUBMIT_SEARCH_JS = """(args) => {
+    const { partyMode, searchLogic, term } = args;
+    const secured = partyMode === 'secured';
+    const debtorRadio = document.getElementById('rdbDebtor');
+    const securedRadio = document.getElementById('rdbSecuredParty')
+        || document.getElementById('rdbSecured');
+    if (secured && securedRadio) {
+        securedRadio.checked = true;
+        if (typeof uccSearchVM !== 'undefined') {
+            uccSearchVM.RadioButtonClick('SecuredPartyName');
+        }
+    } else if (debtorRadio) {
+        debtorRadio.checked = true;
+        if (typeof uccSearchVM !== 'undefined') {
+            uccSearchVM.RadioButtonClick('DebtorName');
+        }
+    }
+    const orgRadio = document.getElementById('rdbOrg');
+    if (orgRadio) orgRadio.checked = true;
+    if (typeof DebtorTypeClick === 'function') {
+        DebtorTypeClick('Organization');
+    }
+    const logic = document.getElementById('ddlSearchLogic');
+    if (logic) logic.value = searchLogic;
+    const nameInput = document.getElementById('UCCSearch_UCCSerach_txtOrgName');
+    if (nameInput) nameInput.value = term;
+}"""
+
 
 class NewYorkScraper(PlaywrightTier1Scraper):
-    """NY UCC lien search — broad MCA terms, pagination, optional detail fetch."""
+    """NY UCC lien search — multi-profile sweeps, pagination, optional detail fetch."""
 
     def __init__(
         self,
@@ -53,6 +112,7 @@ class NewYorkScraper(PlaywrightTier1Scraper):
             run_consolidation=run_consolidation,
             scrape_settings=scrape_settings,
         )
+        self._run_profile_stats: dict[str, int] = {}
 
     @property
     def state_code(self) -> str:
@@ -76,11 +136,43 @@ class NewYorkScraper(PlaywrightTier1Scraper):
     def parse_response(self, html: str) -> list[dict]:
         return []
 
+    def _active_profiles(self) -> list[SearchProfileSpec]:
+        s = self.scrape_settings
+        names = list(s.search_profiles) or list(NY_SEARCH_PROFILES)
+        if s.profile_filter:
+            names = [n for n in names if n == s.profile_filter]
+        return [NY_SEARCH_PROFILES[n] for n in names if n in NY_SEARCH_PROFILES]
+
+    async def _load_terms_for_profile(self, profile: SearchProfileSpec) -> list[str]:
+        s = self.scrape_settings
+        if profile.term_source == TermSource.MCA_ALIASES:
+            return await build_search_term_list(
+                mca_limit=s.mca_term_limit,
+                extra_terms=s.extra_search_terms,
+                max_terms=s.max_terms,
+            )
+        offset = await get_prefix_offset(self.state_code, profile.name)
+        batch, next_offset = slice_prefix_terms(
+            s.prefix_terms,
+            offset=offset,
+            max_terms=s.max_terms,
+        )
+        await save_prefix_offset(self.state_code, profile.name, next_offset)
+        extras = [t.strip().upper() for t in s.extra_search_terms if t.strip()]
+        seen = set(batch)
+        for ex in extras:
+            if ex not in seen:
+                batch.append(ex)
+                seen.add(ex)
+        return batch
+
     async def _fetch_filings_playwright(self) -> list[dict]:
         await self.rate_limiter.wait(self.state_code, tier=self.tier)
-        terms = await self._load_search_terms()
         seen: set[str] = set()
         all_filings: list[dict] = []
+        pages_used = 0
+        page_budget = self.scrape_settings.page_cap_per_run
+        self._run_profile_stats = {}
 
         async with self.playwright_chromium_session(
             launch_args=["--disable-blink-features=AutomationControlled"],
@@ -90,36 +182,81 @@ class NewYorkScraper(PlaywrightTier1Scraper):
                 "{ get: () => undefined });"
             )
 
-            for term in terms:
-                try:
-                    rows = await self._search_term_paginated(page, term)
-                    for row in rows:
-                        fn = row.get("filing_number", "")
-                        if fn and fn not in seen:
-                            seen.add(fn)
-                            all_filings.append(row)
-                    logger.info(
-                        "search_batch",
-                        term=term,
-                        raw=len(rows),
-                        unique_so_far=len(all_filings),
-                    )
-                except Exception as exc:
-                    logger.warning("search_term_failed", term=term, error=str(exc))
+            for profile in self._active_profiles():
+                terms = await self._load_terms_for_profile(profile)
+                profile_count = 0
+                for term in terms:
+                    if page_budget is not None and pages_used >= page_budget:
+                        logger.info(
+                            "page_budget_exhausted",
+                            pages_used=pages_used,
+                            budget=page_budget,
+                        )
+                        break
+                    try:
+                        remaining = None
+                        if page_budget is not None:
+                            remaining = max(0, page_budget - pages_used)
+                        rows, pages = await self._search_term_paginated(
+                            page, profile, term, pages_remaining=remaining
+                        )
+                        pages_used += pages
+                        for row in rows:
+                            fn = row.get("filing_number", "")
+                            if fn and fn not in seen:
+                                seen.add(fn)
+                                all_filings.append(row)
+                                profile_count += 1
+                        logger.info(
+                            "search_batch",
+                            profile=profile.name,
+                            term=term,
+                            raw=len(rows),
+                            pages=pages,
+                            unique_so_far=len(all_filings),
+                        )
+                    except Exception as exc:
+                        logger.warning(
+                            "search_term_failed",
+                            profile=profile.name,
+                            term=term,
+                            error=str(exc),
+                        )
+                self._run_profile_stats[profile.name] = profile_count
+                if page_budget is not None and pages_used >= page_budget:
+                    break
 
         self.rate_limiter.record_success(self.state_code)
-        logger.info("ny_fetch_complete", total_filings=len(all_filings))
+        logger.info(
+            "ny_fetch_complete",
+            total_filings=len(all_filings),
+            pages_used=pages_used,
+            profile_stats=self._run_profile_stats,
+        )
         return all_filings
 
-    async def _search_term_paginated(self, page, term: str) -> list[dict]:
-        """Search one org term; paginate; optional detail enrichment."""
-        await self._submit_lien_search(page, term)
+    async def _search_term_paginated(
+        self,
+        page,
+        profile: SearchProfileSpec,
+        term: str,
+        *,
+        pages_remaining: int | None = None,
+    ) -> tuple[list[dict], int]:
+        """Search one profile|term; paginate; return rows and pages consumed."""
+        await self._submit_lien_search(page, profile, term)
         if not await page.evaluate(_HAS_GRID_JS):
-            return []
+            return [], 0
 
-        completed_pages = await get_page_checkpoint(self.state_code, term)
+        completed_pages = await get_page_checkpoint(
+            self.state_code, profile.name, term
+        )
         max_pages = self._effective_max_pages()
+        if pages_remaining is not None:
+            max_pages = min(max_pages, pages_remaining)
+
         all_rows: list[dict] = []
+        pages_consumed = 0
 
         for _ in range(completed_pages):
             if not await xhtml_grid_next_page(page):
@@ -128,16 +265,26 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         page_index = completed_pages
         while page_index < max_pages:
             page_index += 1
+            pages_consumed += 1
 
-            grid_rows = await page.evaluate(_EXTRACT_GRID_JS)
-            for row_idx, cells in enumerate(grid_rows):
-                filing = self._row_to_filing(cells)
+            grid = await page.evaluate(_EXTRACT_GRID_JS)
+            headers = grid.get("headers") or []
+            sp_col = self._secured_party_column(headers)
+
+            for row_idx, cells in enumerate(grid.get("rows") or []):
+                filing = self._row_to_filing(
+                    cells,
+                    profile=profile,
+                    search_term=term,
+                    secured_party_col=sp_col,
+                )
                 if not filing:
                     continue
-                if (
+                need_detail = (
                     self.scrape_settings.fetch_detail
                     and not filing.get("secured_party")
-                ):
+                )
+                if need_detail:
                     enriched = await self._enrich_row_detail(page, row_idx)
                     if enriched.get("secured_party"):
                         filing["secured_party"] = enriched["secured_party"]
@@ -145,7 +292,9 @@ class NewYorkScraper(PlaywrightTier1Scraper):
                         filing["filing_date"] = enriched["filing_date"]
                 all_rows.append(filing)
 
-            await save_page_checkpoint(self.state_code, term, page_index)
+            await save_page_checkpoint(
+                self.state_code, profile.name, term, page_index
+            )
 
             if page_index >= max_pages:
                 break
@@ -154,32 +303,31 @@ class NewYorkScraper(PlaywrightTier1Scraper):
             if not await page.evaluate(_HAS_GRID_JS):
                 break
 
-        return all_rows
+        return all_rows, pages_consumed
 
     async def _enrich_row_detail(self, page, row_index: int) -> dict:
-        """Open lien detail for one grid row (0-based data row index)."""
         selector = f"#xhtml_grid tbody tr:nth-child({row_index + 1}) td:first-child a"
         return await fetch_secured_party_from_detail(page, lien_selector=selector)
 
-    async def _submit_lien_search(self, page, term: str) -> None:
+    async def _submit_lien_search(
+        self, page, profile: SearchProfileSpec, term: str
+    ) -> None:
         await page.goto(self.base_url, wait_until="networkidle", timeout=60_000)
         await page.click('a:has-text("Lien Search")')
         await page.wait_for_load_state("networkidle", timeout=30_000)
 
+        party_mode = (
+            "secured"
+            if profile.party_mode == PartySearchMode.SECURED
+            else "debtor"
+        )
         await page.evaluate(
-            """(term) => {
-                document.getElementById('rdbDebtor').checked = true;
-                if (typeof uccSearchVM !== 'undefined') {
-                    uccSearchVM.RadioButtonClick('DebtorName');
-                }
-                document.getElementById('rdbOrg').checked = true;
-                if (typeof DebtorTypeClick === 'function') {
-                    DebtorTypeClick('Organization');
-                }
-                document.getElementById('ddlSearchLogic').value = 'SW';
-                document.getElementById('UCCSearch_UCCSerach_txtOrgName').value = term;
-            }""",
-            term,
+            _SUBMIT_SEARCH_JS,
+            {
+                "partyMode": party_mode,
+                "searchLogic": profile.search_logic,
+                "term": term,
+            },
         )
         await page.wait_for_timeout(300)
 
@@ -192,7 +340,22 @@ class NewYorkScraper(PlaywrightTier1Scraper):
                 }"""
             )
 
-    def _row_to_filing(self, cells: list[str]) -> dict | None:
+    def _secured_party_column(self, headers: list[str]) -> int | None:
+        for idx, label in enumerate(headers):
+            if "secured" in label and "party" in label:
+                return idx
+        if _COL_SECURED_PARTY < 20:
+            return _COL_SECURED_PARTY
+        return None
+
+    def _row_to_filing(
+        self,
+        cells: list[str],
+        *,
+        profile: SearchProfileSpec,
+        search_term: str,
+        secured_party_col: int | None,
+    ) -> dict | None:
         if len(cells) <= _COL_FILING_DATE:
             return None
         lien_number = cells[_COL_LIEN_NUMBER].strip()
@@ -203,11 +366,20 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         if " " in date_str:
             date_str = date_str.split(" ")[0]
         filing_date = parse_date(date_str) if date_str else None
+
+        secured_party: str | None = None
+        if profile.party_mode == PartySearchMode.SECURED:
+            secured_party = search_term.strip().upper() or None
+        if secured_party_col is not None and secured_party_col < len(cells):
+            grid_sp = cells[secured_party_col].strip()
+            if grid_sp:
+                secured_party = grid_sp
+
         return {
             "filing_number": lien_number,
             "state": self.state_code,
             "debtor_name": debtor,
-            "secured_party": None,
+            "secured_party": secured_party,
             "filing_date": filing_date,
             "collateral_description": None,
         }
