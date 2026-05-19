@@ -2,8 +2,8 @@
     <div class="flex max-h-[90vh] flex-col bg-white rounded-xl">
         <div class="flex shrink-0 items-start justify-between gap-4 border-b border-gray-100 px-6 py-4">
             <div>
-                <h2 class="text-xl font-semibold text-gray-900">How the UCC pipeline works</h2>
-                <p class="mt-1 text-sm text-gray-500">For demos: scrapers → filings → MCA leads → enrichment → compliance → export</p>
+                <h2 class="text-xl font-semibold text-gray-900">How this pipeline works</h2>
+                <p class="mt-1 text-sm text-gray-500">UCC filings → consolidation accounts → MCA leads — operator guide</p>
             </div>
             <button type="button" onclick="document.getElementById('pipeline-explainer').close()"
                 class="rounded-lg px-3 py-1.5 text-sm font-medium text-gray-600 hover:bg-gray-100">
@@ -11,90 +11,166 @@
             </button>
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto px-6 py-4 text-sm text-gray-800 space-y-6">
+            <section class="rounded-lg border border-amber-200 bg-amber-50 px-4 py-3">
+                <h3 class="font-semibold text-gray-900 mb-2">Understanding the numbers</h3>
+                <p class="text-gray-700 mb-3">
+                    A full Florida run might show about <strong>2,451 filings</strong>, <strong>~1,946 accounts</strong>, and <strong>~169 MCA lead accounts</strong> (businesses with MCA funders on filings), with roughly <strong>~12 priority</strong> and <strong>~5 work</strong> in the consolidation queue. Filing-level <code class="rounded bg-white px-1 text-xs">leads</code> rows from strict detection may still be only <strong>~8</strong>—that is <strong>normal</strong>.
+                </p>
+                <dl class="space-y-3 text-gray-700">
+                    <div>
+                        <dt class="font-medium text-gray-900">Filings</dt>
+                        <dd class="mt-0.5">Every UCC row we scraped from FL—banks, SBA, registered agents, MCA funders, and more. Stored in <code class="rounded bg-white px-1 text-xs">ucc_filings</code>. This number is always the largest.</dd>
+                    </div>
+                    <div>
+                        <dt class="font-medium text-gray-900">Leads (MCA funder accounts)</dt>
+                        <dd class="mt-0.5">One <code class="rounded bg-white px-1 text-xs">business_accounts</code> row per debtor with <strong>≥1 MCA funder</strong> on linked filings (<code class="rounded bg-white px-1 text-xs">lender_class=mca_funder</code> or <code class="rounded bg-white px-1 text-xs">is_mca</code>). Manage names in <a href="/dashboard/mca-lenders" class="text-blue-700 underline">MCA lenders</a> and reclassify after edits.</dd>
+                    </div>
+                    <div>
+                        <dt class="font-medium text-gray-900">Accounts</dt>
+                        <dd class="mt-0.5">One business per normalized debtor name + state in <code class="rounded bg-white px-1 text-xs">business_accounts</code>. <strong>consolidation_score</strong> and <strong>consolidation_tier</strong> (priority / work / monitor / suppress) are your <strong>main call list</strong> for debt consolidation.</dd>
+                    </div>
+                </dl>
+                <p class="mt-3 text-gray-700">
+                    <strong>Why two “lead” numbers?</strong> The dashboard total is <strong>MCA funder accounts</strong>. The legacy <code class="rounded bg-white px-1 text-xs">leads</code> table counts strict per-filing <code class="rounded bg-white px-1 text-xs">detect_mca</code> matches only.
+                </p>
+                <p class="mt-2 text-sm text-gray-600">
+                    Work <strong>Leads</strong> for MCA funder businesses. Use <strong>Accounts</strong> for the full consolidation tier queue. Browse <strong>Filings</strong> for research.
+                </p>
+            </section>
+
+            <section class="rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+                <h3 class="font-semibold text-gray-900 mb-2">Core concepts</h3>
+                <dl class="space-y-2 text-gray-700">
+                    <div>
+                        <dt class="font-medium text-gray-900">UCC filing</dt>
+                        <dd class="mt-0.5">A public lien record from a Secretary of State. Each row in <code class="rounded bg-white px-1 text-xs">ucc_filings</code> is one filing (debtor, secured party, dates).</dd>
+                    </div>
+                    <div>
+                        <dt class="font-medium text-gray-900">MCA lead</dt>
+                        <dd class="mt-0.5">A business account with at least one MCA-classified secured party on its filings. Lender names come from <code class="rounded bg-white px-1 text-xs">mca_aliases</code> (classifier) plus keyword heuristics.</dd>
+                    </div>
+                    <div>
+                        <dt class="font-medium text-gray-900">Consolidation account</dt>
+                        <dd class="mt-0.5">One business (normalized debtor name + state) rolled up across its filings in <code class="rounded bg-white px-1 text-xs">business_accounts</code>. Scored for debt-consolidation outreach — separate from MCA lead scoring.</dd>
+                    </div>
+                </dl>
+            </section>
+
             <section>
-                <h3 class="font-semibold text-gray-900 mb-2">How scrapers work</h3>
-                <ul class="list-disc pl-5 space-y-1 text-gray-700">
-                    <li>Each U.S. state (where implemented) has its own scraper: simple states use <strong class="font-medium">HTTP</strong>; harder portals (e.g. California behind a WAF) use <strong class="font-medium">Playwright</strong>.</li>
-                    <li>The <strong class="font-medium">scheduler</strong> (when enabled on the pipeline service) runs jobs on a <strong>tier-based interval</strong> (e.g. Tier 1 about daily, Tier 2/3 less often).</li>
-                    <li>Raw rows land in Postgres as <code class="rounded bg-gray-100 px-1 text-xs">ucc_filings</code>. Inserts are <strong class="font-medium">deduplicated</strong> by <code class="rounded bg-gray-100 px-1 text-xs">state</code> + <code class="rounded bg-gray-100 px-1 text-xs">filing_number</code> so re-scrapes do not duplicate the same filing.</li>
-                    <li><strong class="font-medium">California</strong> searches by a set of secured-party keywords and a <strong class="font-medium">rolling filing-date window</strong> (configurable via <code class="rounded bg-gray-100 px-1 text-xs">SCRAPER_FILING_LOOKBACK_DAYS</code> in <code class="rounded bg-gray-100 px-1 text-xs">.env</code>). Results are de-duped in-memory across search terms before save.</li>
+                <h3 class="font-semibold text-gray-900 mb-2">Workflow (Florida today)</h3>
+                <ol class="list-decimal pl-5 space-y-2 text-gray-700">
+                    <li><strong class="font-medium">Manual FL scrape</strong> — Deep pagination on the Florida API (row numbers, multiple index profiles). Optional filing-date enrichment per row.</li>
+                    <li><strong class="font-medium">Persist filings</strong> — Upsert by <code class="rounded bg-gray-100 px-1 text-xs">state</code> + <code class="rounded bg-gray-100 px-1 text-xs">filing_number</code> (no duplicates).</li>
+                    <li><strong class="font-medium">Classify &amp; rollup</strong> — Tag lender class / MCA on filings; merge into <code class="rounded bg-gray-100 px-1 text-xs">business_accounts</code>.</li>
+                    <li><strong class="font-medium">Score accounts</strong> — <strong>consolidation_score</strong> (0–100) and <strong>consolidation_tier</strong>: priority, work, monitor, suppress.</li>
+                    <li><strong class="font-medium">MCA pipeline</strong> — Creates or updates <code class="rounded bg-gray-100 px-1 text-xs">leads</code> with MCA match metadata.</li>
+                </ol>
+                <p class="mt-2 text-gray-600">Florida Standard search ignores A–Z text cursors; coverage comes from paginating <code class="rounded bg-gray-100 px-1 text-xs">rowNumber</code> across org compact + org actual index profiles (and optional Exact lender terms).</p>
+            </section>
+
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-2">How to run</h3>
+                <ul class="list-disc pl-5 space-y-1.5 text-gray-700">
+                    <li><strong class="font-medium">Dashboard</strong> — On <a href="/dashboard/" class="text-blue-700 underline">/dashboard/</a>, use <em>Run Florida scraper</em> (<code class="rounded bg-gray-100 px-1 text-xs">POST /dashboard/scrapers/FL/run</code>, background job).</li>
+                    <li><strong class="font-medium">CLI</strong> — Fresh data: <code class="rounded bg-gray-100 px-1 text-xs">python scripts/reset_fl_data.py</code> then <code class="rounded bg-gray-100 px-1 text-xs">python scripts/run_fl_scrape.py</code>. Quick test: add <code class="rounded bg-gray-100 px-1 text-xs">--quick</code>. Snapshot: <code class="rounded bg-gray-100 px-1 text-xs">python scripts/report_fl_data.py</code>.</li>
                 </ul>
             </section>
+
             <section>
-                <h3 class="font-semibold text-gray-900 mb-2">Pipeline steps (conceptual order)</h3>
-                <ol class="list-decimal pl-5 space-y-2 text-gray-700">
-                    <li><strong class="font-medium">Scrape</strong> — SOS portals → <code class="rounded bg-gray-100 px-1 text-xs">ucc_filings</code>.</li>
-                    <li><strong class="font-medium">MCA detection &amp; scoring</strong> — For each filing, match secured party / collateral against <code class="rounded bg-gray-100 px-1 text-xs">mca_aliases</code> and heuristics; scored rows become <code class="rounded bg-gray-100 px-1 text-xs">leads</code>.</li>
-                    <li><strong class="font-medium">Enrichment</strong> — Waterfall of vendors fills phone, email, etc.; cache + circuit breaker protect cost and stability.</li>
-                    <li><strong class="font-medium">Compliance</strong> — Four ordered gates (internal DNC, DataMerch, DNC scrub, blacklist). Fail → lead blocked; pass → <code class="rounded bg-gray-100 px-1 text-xs">cleared</code>.</li>
-                    <li><strong class="font-medium">Export</strong> — Cleared leads go to GoHighLevel or CSV via a single adapter interface.</li>
-                    <li><strong class="font-medium">Cross-state dedup</strong> (product target) — Exact + fuzzy matching before or as part of export (see roadmap).</li>
-                </ol>
+                <h3 class="font-semibold text-gray-900 mb-2">Dashboard pages</h3>
+                <div class="grid gap-2 sm:grid-cols-2">
+                    <a href="/dashboard/" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+                        <span class="font-medium text-gray-900">/dashboard</span>
+                        <p class="text-xs text-gray-600 mt-0.5">Stats, scraper runs, FL trigger</p>
+                    </a>
+                    <a href="/dashboard/filings" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+                        <span class="font-medium text-gray-900">/dashboard/filings</span>
+                        <p class="text-xs text-gray-600 mt-0.5">Raw UCC rows by state</p>
+                    </a>
+                    <a href="/dashboard/leads" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+                        <span class="font-medium text-gray-900">/dashboard/leads</span>
+                        <p class="text-xs text-gray-600 mt-0.5">MCA funder accounts — <strong>Export CSV</strong> for CRM (GoHighLevel API later)</p>
+                    </a>
+                    <a href="/dashboard/mca-lenders" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+                        <span class="font-medium text-gray-900">/dashboard/mca-lenders</span>
+                        <p class="text-xs text-gray-600 mt-0.5">Alias CRUD + reclassify</p>
+                    </a>
+                    <a href="/dashboard/accounts" class="rounded-lg border border-gray-200 px-3 py-2 hover:bg-gray-50">
+                        <span class="font-medium text-gray-900">/dashboard/accounts</span>
+                        <p class="text-xs text-gray-600 mt-0.5">Consolidation tiers &amp; scores</p>
+                    </a>
+                </div>
             </section>
+
             <section>
-                <h3 class="font-semibold text-gray-900 mb-3">What exists today vs what is still open</h3>
+                <h3 class="font-semibold text-gray-900 mb-2">Scores &amp; tiers</h3>
                 <div class="overflow-x-auto rounded-lg border border-gray-200">
                     <table class="w-full text-left text-xs sm:text-sm">
                         <thead class="bg-gray-50 text-gray-600">
                             <tr>
-                                <th class="px-3 py-2 font-medium">Area</th>
-                                <th class="px-3 py-2 font-medium">Status</th>
-                                <th class="px-3 py-2 font-medium">Notes for peers</th>
+                                <th class="px-3 py-2 font-medium">Field</th>
+                                <th class="px-3 py-2 font-medium">Where</th>
+                                <th class="px-3 py-2 font-medium">Meaning</th>
                             </tr>
                         </thead>
-                        <tbody class="divide-y divide-gray-100">
+                        <tbody class="divide-y divide-gray-100 text-gray-700">
                             <tr>
-                                <td class="px-3 py-2">State scrapers + scheduler</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
-                                <td class="px-3 py-2 text-gray-700">Many states implemented; tiered cadence when <code class="rounded bg-gray-100 px-1">SCRAPER_SCHEDULER_ENABLED</code> is on.</td>
+                                <td class="px-3 py-2 font-medium">consolidation_score</td>
+                                <td class="px-3 py-2"><code class="rounded bg-gray-100 px-1">business_accounts</code></td>
+                                <td class="px-3 py-2">0–100 debt-consolidation fit from filing patterns (funder count, recency, material UCCs).</td>
                             </tr>
                             <tr>
-                                <td class="px-3 py-2">MCA detector + scorer</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
-                                <td class="px-3 py-2 text-gray-700">Needs seeded <code class="rounded bg-gray-100 px-1">mca_aliases</code> for real hit rates; banks in search results often are not MCA.</td>
+                                <td class="px-3 py-2 font-medium">consolidation_tier</td>
+                                <td class="px-3 py-2"><code class="rounded bg-gray-100 px-1">business_accounts</code></td>
+                                <td class="px-3 py-2"><span class="font-medium">priority</span> / <span class="font-medium">work</span> / <span class="font-medium">monitor</span> / <span class="font-medium">suppress</span> — who to call first.</td>
                             </tr>
                             <tr>
-                                <td class="px-3 py-2">Filing → lead automation</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">Partial</span></td>
-                                <td class="px-3 py-2 text-gray-700"><code class="rounded bg-gray-100 px-1">run_mca_pipeline</code> exists but is <strong>not</strong> hooked to the live scheduler yet—runs via E2E script or manual/script calls. So filings can grow without new leads until that runs.</td>
-                            </tr>
-                            <tr>
-                                <td class="px-3 py-2">Enrichment + HALT</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
-                                <td class="px-3 py-2 text-gray-700">Waterfall, cache, rolling error-rate halt; API keys in env.</td>
-                            </tr>
-                            <tr>
-                                <td class="px-3 py-2">Compliance gate</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
-                                <td class="px-3 py-2 text-gray-700">Four layers, audit rows, export guard on adapters, DNC reversal audit.</td>
-                            </tr>
-                            <tr>
-                                <td class="px-3 py-2">Export (GHL / CSV)</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
-                                <td class="px-3 py-2 text-gray-700">Adapter pattern; cleared-only export enforced in code paths.</td>
-                            </tr>
-                            <tr>
-                                <td class="px-3 py-2">Dashboard</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-green-100 px-2 py-0.5 text-green-800">In repo</span></td>
-                                <td class="px-3 py-2 text-gray-700">This page + HTMX partials; filings/leads per state below.</td>
-                            </tr>
-                            <tr>
-                                <td class="px-3 py-2">Cross-state dedup</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-gray-200 px-2 py-0.5 text-gray-800">Roadmap</span></td>
-                                <td class="px-3 py-2 text-gray-700">Target in master plan (C-10); dedicated dedup module not primary in this build yet.</td>
-                            </tr>
-                            <tr>
-                                <td class="px-3 py-2">Agent / watchdog</td>
-                                <td class="px-3 py-2"><span class="whitespace-nowrap rounded-full bg-amber-100 px-2 py-0.5 text-amber-900">Separate services</span></td>
-                                <td class="px-3 py-2 text-gray-700">Own entrypoints; self-healing and heartbeats per architecture docs.</td>
+                                <td class="px-3 py-2 font-medium">lead_score</td>
+                                <td class="px-3 py-2"><code class="rounded bg-gray-100 px-1">leads</code></td>
+                                <td class="px-3 py-2">MCA match strength (alias / fuzzy / heuristic), not consolidation fit.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
             </section>
-            <section class="rounded-lg bg-blue-50 px-4 py-3 text-blue-900">
-                <p class="font-medium">Why many filings but zero leads?</p>
-                <p class="mt-1 text-blue-800/90">Either MCA matching did not fire on those secured parties (seed aliases + heuristics), or the batch that turns filings into <code class="rounded bg-blue-100/80 px-1 text-xs">leads</code> has not been run continuously in the process you are demoing.</p>
+
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-2">Operator checklist</h3>
+                <ul class="list-disc pl-5 space-y-1 text-gray-700">
+                    <li>Before a full refresh: <code class="rounded bg-gray-100 px-1 text-xs">reset_fl_data.py</code> (FL only).</li>
+                    <li>Run scrape; confirm new rows on Filings and Accounts.</li>
+                    <li>Do not worry if leads &lt;&lt; filings on a broad scrape—that is expected.</li>
+                    <li>Sort accounts by tier — review <strong>priority</strong> and <strong>work</strong> first (your consolidation queue).</li>
+                    <li>Check leads for MCA names; seed <code class="rounded bg-gray-100 px-1 text-xs">mca_aliases</code> if hit rate is low.</li>
+                    <li>Investigate fuzzy debtor matches flagged “needs review” on account detail.</li>
+                </ul>
+            </section>
+
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-2">Florida scrape env vars</h3>
+                <div class="overflow-x-auto rounded-lg border border-gray-200">
+                    <table class="w-full text-left text-xs">
+                        <thead class="bg-gray-50 text-gray-600">
+                            <tr>
+                                <th class="px-2 py-1.5">Variable</th>
+                                <th class="px-2 py-1.5">Role</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100 text-gray-700">
+                            <tr><td class="px-2 py-1.5"><code>FL_SCRAPE_PAGE_CAP_PER_RUN</code></td><td class="px-2 py-1.5">Max pages per index profile per run (default 50)</td></tr>
+                            <tr><td class="px-2 py-1.5"><code>FL_SCRAPE_MAX_PAGES</code></td><td class="px-2 py-1.5">Hard cap per profile across resumes</td></tr>
+                            <tr><td class="px-2 py-1.5"><code>FL_SCRAPE_INDEX_PROFILES</code></td><td class="px-2 py-1.5">Comma list: <code>Type|SubOption</code> pairs</td></tr>
+                            <tr><td class="px-2 py-1.5"><code>FL_SCRAPE_FETCH_FILING_DATE</code></td><td class="px-2 py-1.5">Per-filing metadata fetch (slower, richer)</td></tr>
+                            <tr><td class="px-2 py-1.5"><code>FL_SCRAPE_ENRICH_CONCURRENCY</code></td><td class="px-2 py-1.5">Parallel detail requests</td></tr>
+                            <tr><td class="px-2 py-1.5"><code>FL_SCRAPE_EXACT_TERMS</code></td><td class="px-2 py-1.5">Optional Exact-mode lender search terms</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <section>
+                <h3 class="font-semibold text-gray-900 mb-2">Not in this build yet</h3>
+                <p class="text-gray-600">Scheduled multi-state scrapes, enrichment waterfall, compliance gates, export to GoHighLevel, and cross-state dedup are implemented in code paths but not wired as the default operator flow for FL demos. Use filings + accounts + leads views for scrape → score → review.</p>
             </section>
         </div>
     </div>

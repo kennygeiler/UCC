@@ -17,8 +17,15 @@ if "pytest" in sys.modules:
 
 
 @pytest.fixture(autouse=True)
-def set_test_env(monkeypatch):
+def set_test_env(monkeypatch, request):
     """Set required environment variables for all tests."""
+    if request.node.get_closest_marker("integration") is not None:
+        monkeypatch.setenv("SENTRY_DSN", _VALID_SENTRY_DSN)
+        monkeypatch.setenv("SCRAPER_SCHEDULER_ENABLED", "false")
+        monkeypatch.setenv("MCA_ALIAS_UPDATE_ENABLED", "false")
+        monkeypatch.setenv("ENRICH_RETRY_JOB_ENABLED", "false")
+        return
+
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://test:test@localhost:5432/test_ucc")
     monkeypatch.setenv("SENTRY_DSN", _VALID_SENTRY_DSN)
     monkeypatch.setenv("SCRAPER_SCHEDULER_ENABLED", "false")

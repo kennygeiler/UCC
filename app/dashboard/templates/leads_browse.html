@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MCA Leads — Browse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <div>
+                <h1 class="text-3xl font-bold">MCA Leads</h1>
+                <p class="text-sm text-gray-600 mt-1">Business accounts with at least one MCA funder on UCC filings</p>
+            </div>
+            <nav class="flex flex-wrap gap-4 text-sm">
+                <a href="/dashboard/" class="text-blue-600 hover:underline">Dashboard</a>
+                <a href="/dashboard/filings" class="text-blue-600 hover:underline">Filings</a>
+                <a href="/dashboard/accounts" class="text-blue-600 hover:underline">Accounts</a>
+                <a href="/dashboard/mca-lenders" class="text-blue-600 hover:underline">MCA lenders</a>
+            </nav>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <form id="leads-filters"
+                class="space-y-4"
+                hx-get="/dashboard/leads/table"
+                hx-target="#leads-results"
+                hx-swap="innerHTML"
+                hx-trigger="change delay:300ms, submit">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-1" for="state">State</label>
+                        <input type="text" id="state" name="state" maxlength="2"
+                            value="{{ filters.get('state', 'FL') }}"
+                            placeholder="FL"
+                            class="w-full border border-gray-300 rounded px-3 py-2 text-sm uppercase">
+                    </div>
+                    <div class="md:col-span-2">
+                        <label class="block text-sm text-gray-500 mb-1" for="debtor_name">Debtor name</label>
+                        <input type="text" id="debtor_name" name="debtor_name"
+                            value="{{ filters.get('debtor_name', '') }}"
+                            placeholder="Partial match"
+                            class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                    </div>
+                </div>
+                <div>
+                    <span class="block text-sm text-gray-500 mb-2">Consolidation tier</span>
+                    {% set st = filters.get('state', 'FL') %}
+                    <div class="flex flex-wrap gap-2">
+                        <a href="/dashboard/leads?state={{ st }}"
+                            class="rounded-full px-3 py-1 text-sm border {% if not active_tier %}bg-blue-600 text-white border-blue-600{% else %}bg-white text-gray-700 border-gray-300 hover:bg-gray-50{% endif %}">
+                            All
+                        </a>
+                        {% for chip in tier_chips %}
+                        {% set chip_q = '?tier=' ~ chip ~ '&state=' ~ st %}
+                        <a href="/dashboard/leads{{ chip_q }}"
+                            hx-get="/dashboard/leads/table{{ chip_q }}"
+                            hx-target="#leads-results"
+                            hx-swap="innerHTML"
+                            class="rounded-full px-3 py-1 text-sm border {% if active_tier == chip %}bg-blue-600 text-white border-blue-600{% else %}bg-white text-gray-700 border-gray-300 hover:bg-gray-50{% endif %}">
+                            {{ chip | capitalize }}
+                        </a>
+                        {% endfor %}
+                    </div>
+                    <input type="hidden" name="tier" id="tier" value="{{ filters.get('tier', '') }}">
+                </div>
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Search</button>
+                    <a href="/dashboard/leads?state=FL" class="text-sm text-gray-600 hover:underline py-2">Clear</a>
+                    <a href="{{ export_csv_url }}"
+                        class="sm:ml-auto bg-white border border-gray-300 text-gray-800 px-4 py-2 rounded text-sm hover:bg-gray-50">
+                        Export CSV
+                    </a>
+                </div>
+            </form>
+        </div>
+
+        <div id="leads-results" class="bg-white rounded-lg shadow p-6">
+            {% include "partials/leads_table.html" %}
+        </div>
+    </div>
+</body>
+</html>

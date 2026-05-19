@@ -1,0 +1,27 @@
+<table class="w-full text-sm">
+    <thead>
+        <tr class="text-left text-gray-500 border-b">
+            <th class="pb-2">State</th>
+            <th class="pb-2">Status</th>
+            <th class="pb-2 text-right">Records</th>
+            <th class="pb-2">Started</th>
+            <th class="pb-2">Finished</th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for r in recent_scraper_runs %}
+        <tr class="border-b border-gray-100">
+            <td class="py-2 font-medium">
+                <a href="{{ r.filings_url }}" class="text-blue-600 hover:underline">{{ r.state }}</a>
+            </td>
+            <td class="py-2">{{ r.status }}</td>
+            <td class="py-2 text-right tabular-nums">{{ r.records_found }}</td>
+            <td class="py-2 text-gray-500 text-xs whitespace-nowrap">{{ r.started_at }}</td>
+            <td class="py-2 text-gray-500 text-xs whitespace-nowrap">{{ r.finished_at or '—' }}</td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if not recent_scraper_runs %}
+<p class="text-gray-400">No recent scraper runs.</p>
+{% endif %}

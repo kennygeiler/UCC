@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Accounts — Consolidation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <h1 class="text-3xl font-bold">FL Accounts</h1>
+            <nav class="flex flex-wrap items-center gap-4 text-sm">
+                <a href="/dashboard/" class="text-blue-600 hover:underline">Dashboard</a>
+                <a href="/dashboard/filings" class="text-blue-600 hover:underline">Filings</a>
+                <a href="/dashboard/leads" class="text-blue-600 hover:underline">Leads</a>
+                <button type="button"
+                    onclick="document.getElementById('pipeline-explainer').showModal()"
+                    class="text-blue-700 underline hover:text-blue-800">
+                    Understanding the numbers
+                </button>
+            </nav>
+        </div>
+        {% include "partials/pipeline_explainer_dialog.html" %}
+
+        {% if last_fl_run_at %}
+        <p class="text-sm text-gray-500 mb-4">Last FL scrape finished: {{ last_fl_run_at }}</p>
+        {% endif %}
+
+        <p class="text-sm text-gray-600 mb-4">
+            Sort by <strong>priority</strong> and <strong>work</strong> for your call list—account tiers are separate from the MCA leads count.
+        </p>
+
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <form class="space-y-4"
+                hx-get="/dashboard/accounts/table"
+                hx-target="#accounts-results"
+                hx-swap="innerHTML"
+                hx-trigger="change delay:300ms, submit">
+                <div class="flex flex-wrap gap-4 items-end">
+                    <div>
+                        <label class="block text-sm text-gray-500 mb-1">State</label>
+                        <input type="text" name="state" maxlength="2" value="{{ filters.get('state', 'FL') }}"
+                            class="w-20 border border-gray-300 rounded px-3 py-2 text-sm uppercase">
+                    </div>
+                    <label class="flex items-center gap-2 text-sm">
+                        <input type="checkbox" name="since_last_run" value="1"
+                            {% if filters.get('since_last_run') %}checked{% endif %}
+                            class="rounded border-gray-300">
+                        Since last FL run
+                    </label>
+                </div>
+                <div>
+                    <span class="block text-sm text-gray-500 mb-2">Consolidation tier</span>
+                    <div class="flex flex-wrap gap-2">
+                        <a href="/dashboard/accounts?state={{ filters.get('state', 'FL') }}"
+                            class="rounded-full px-3 py-1 text-sm border {% if not active_tier %}bg-blue-600 text-white border-blue-600{% else %}bg-white text-gray-700 border-gray-300{% endif %}">
+                            All
+                        </a>
+                        {% for chip in tier_chips %}
+                        <a href="/dashboard/accounts?tier={{ chip }}&state={{ filters.get('state', 'FL') }}"
+                            class="rounded-full px-3 py-1 text-sm border {% if active_tier == chip %}bg-blue-600 text-white border-blue-600{% else %}bg-white text-gray-700 border-gray-300{% endif %}">
+                            {{ chip | capitalize }}
+                        </a>
+                        {% endfor %}
+                    </div>
+                </div>
+            </form>
+        </div>
+
+        <div id="accounts-results" class="bg-white rounded-lg shadow p-6">
+            {% include "partials/accounts_table.html" %}
+        </div>
+    </div>
+</body>
+</html>

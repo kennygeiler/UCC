@@ -3,14 +3,17 @@
         <tr class="text-left text-gray-500 border-b">
             <th class="pb-2">State</th>
             <th class="pb-2">Status</th>
-            <th class="pb-2">Records Found</th>
-            <th class="pb-2">Last Run</th>
+            <th class="pb-2 text-right">Records found</th>
+            <th class="pb-2">Last run</th>
+            <th class="pb-2"></th>
         </tr>
     </thead>
     <tbody>
         {% for s in scrapers %}
         <tr class="border-b border-gray-100">
-            <td class="py-2 font-medium">{{ s.state }}</td>
+            <td class="py-2 font-medium">
+                <a href="{{ s.filings_url }}" class="text-blue-600 hover:underline">{{ s.state }}</a>
+            </td>
             <td class="py-2">
                 {% if s.status == 'completed' %}
                 <span class="text-green-600">Completed</span>
@@ -20,9 +23,15 @@
                 <span class="text-red-600">{{ s.status }}</span>
                 {% endif %}
             </td>
-            <td class="py-2">{{ s.records_found }}</td>
-            <td class="py-2 text-gray-500">{{ s.last_run }}</td>
+            <td class="py-2 text-right tabular-nums">{{ s.records_found }}</td>
+            <td class="py-2 text-gray-500 whitespace-nowrap">{{ s.last_run }}</td>
+            <td class="py-2 text-right">
+                <a href="/dashboard/leads?state={{ s.state }}" class="text-xs text-blue-600 hover:underline">Leads</a>
+            </td>
         </tr>
         {% endfor %}
     </tbody>
 </table>
+{% if not scrapers %}
+<p class="text-gray-400">No scraper runs recorded yet.</p>
+{% endif %}

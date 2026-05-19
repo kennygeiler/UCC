@@ -54,6 +54,8 @@ async def test_process_filing_idempotent_and_canonical_fields():
     assert lead1.source_filing_id == fid
     assert lead1.debtor_name_normalized == normalize_name(debtor)
     assert lead1.mca_tier in ("hot", "warm", "cold")
+    assert lead1.mca_match_type is not None
+    assert lead1.mca_match_confidence is not None
 
     lead2 = await process_filing(filing)
     assert lead2.id == lead1.id

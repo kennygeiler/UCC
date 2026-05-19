@@ -48,9 +48,27 @@ class Settings(BaseSettings):
     # Larger values backfill further; persistence still dedupes by state + filing_number.
     SCRAPER_FILING_LOOKBACK_DAYS: int = 3
 
+    # Florida scraper — deep Standard pagination + multi-index profiles (not A–Z).
+    # See app/scrapers/states/florida.py.
+    FL_SCRAPE_MAX_PAGES: int = 500
+    FL_SCRAPE_PAGE_CAP_PER_RUN: int = 50
+    FL_SCRAPE_INDEX_PROFILES: str = (
+        "OrganizationDebtorName|FiledCompactDebtorNameList,"
+        "OrganizationDebtorName|FiledActualDebtorNameList,"
+        "IndividualDebtorName|FiledCompactDebtorNameList"
+    )
+    FL_SCRAPE_ENRICH_CONCURRENCY: int = 5
+    FL_SCRAPE_FETCH_FILING_DATE: bool = True
+    FL_SCRAPE_EXACT_TERMS: str = ""
+    # Deprecated: Standard mode ignores text; kept for backwards-compatible env only.
+    FL_SCRAPE_SEARCH_TERMS: str = ""
+
     # MCA detector — fuzzy alias match (after exact match; O(n) over alias rows)
     MCA_FUZZY_MIN_ALIAS_LEN: int = 5
-    MCA_FUZZY_SCORE_CUTOFF: int = 85
+    MCA_FUZZY_SCORE_CUTOFF: int = 90
+    MCA_FUZZY_REQUIRE_TOKEN_OVERLAP: bool = True
+    # Comma-separated lender_class values that skip alias/fuzzy MCA matching
+    MCA_BLOCKED_LENDER_CLASSES: str = "government,registered_agent,insurance,bank"
 
     # MCA alias auto-updater job (same scheduler as scrapers)
     MCA_ALIAS_UPDATE_ENABLED: bool = True

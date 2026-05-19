@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>UCC Filings — Browse</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div class="max-w-7xl mx-auto px-4 py-8">
+        <div class="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+            <h1 class="text-3xl font-bold">UCC Filings</h1>
+            <nav class="flex gap-4 text-sm">
+                <a href="/dashboard/" class="text-blue-600 hover:underline">Dashboard</a>
+                <a href="/dashboard/leads" class="text-blue-600 hover:underline">Browse leads</a>
+            </nav>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <form id="filings-filters"
+                class="grid grid-cols-1 md:grid-cols-4 gap-4"
+                hx-get="/dashboard/filings/table"
+                hx-target="#filings-results"
+                hx-swap="innerHTML"
+                hx-trigger="change delay:300ms, submit">
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1" for="state">State</label>
+                    <input type="text" id="state" name="state" maxlength="2"
+                        value="{{ filters.get('state', '') }}"
+                        placeholder="FL"
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm uppercase">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1" for="debtor_name">Debtor name</label>
+                    <input type="text" id="debtor_name" name="debtor_name"
+                        value="{{ filters.get('debtor_name', '') }}"
+                        placeholder="Partial match"
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                </div>
+                <div>
+                    <label class="block text-sm text-gray-500 mb-1" for="secured_party">Secured party</label>
+                    <input type="text" id="secured_party" name="secured_party"
+                        value="{{ filters.get('secured_party', '') }}"
+                        placeholder="Partial match"
+                        class="w-full border border-gray-300 rounded px-3 py-2 text-sm">
+                </div>
+                <div class="flex items-end gap-2">
+                    <button type="submit" class="bg-blue-600 text-white px-4 py-2 rounded text-sm hover:bg-blue-700">Search</button>
+                    <a href="/dashboard/filings" class="text-sm text-gray-600 hover:underline py-2">Clear</a>
+                </div>
+            </form>
+        </div>
+
+        <div id="filings-results" class="bg-white rounded-lg shadow p-6">
+            {% include "partials/filings_table.html" %}
+        </div>
+    </div>
+</body>
+</html>

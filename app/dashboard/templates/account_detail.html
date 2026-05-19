@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ account.display_name }} — Account</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+</head>
+<body class="bg-gray-50 text-gray-900">
+    <div class="max-w-5xl mx-auto px-4 py-8">
+        <a href="/dashboard/accounts" class="text-sm text-blue-600 hover:underline">← Accounts</a>
+        <h1 class="text-2xl font-bold mt-4">{{ account.display_name }}</h1>
+        <p class="text-sm text-gray-500">{{ account.state }} · Consolidation score {{ account.consolidation_score or '—' }} · {{ account.consolidation_tier or '—' }}</p>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mt-6">
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500">MCA funders</p>
+                <p class="text-xl font-bold">{{ account.mca_funder_count }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500">Material UCCs</p>
+                <p class="text-xl font-bold">{{ account.material_ucc_count }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500">Days since filing</p>
+                <p class="text-xl font-bold">{{ account.days_since_last_filing if account.days_since_last_filing is not none else '—' }}</p>
+            </div>
+            <div class="bg-white rounded-lg shadow p-4">
+                <p class="text-xs text-gray-500">Last scored</p>
+                <p class="text-sm font-medium">{{ account.last_scored_at or '—' }}</p>
+            </div>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-lg font-semibold mb-3">Score breakdown</h2>
+            <dl class="grid grid-cols-2 gap-2 text-sm">
+                {% for key, val in account.score_components.items() %}
+                <dt class="text-gray-500">{{ key }}</dt>
+                <dd class="tabular-nums">{{ val }}</dd>
+                {% endfor %}
+            </dl>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-lg font-semibold mb-3">Filings</h2>
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-gray-500 border-b">
+                        <th class="pb-2">Number</th>
+                        <th class="pb-2">Date</th>
+                        <th class="pb-2">Lender class</th>
+                        <th class="pb-2">Secured party</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for f in account.filings %}
+                    <tr class="border-b border-gray-100">
+                        <td class="py-2 font-mono text-xs">{{ f.filing_number }}</td>
+                        <td class="py-2">{{ f.filing_date or '—' }}</td>
+                        <td class="py-2"><span class="rounded bg-gray-100 px-2 py-0.5 text-xs">{{ f.lender_class }}</span></td>
+                        <td class="py-2 text-gray-600">{{ f.secured_party[:80] }}{% if f.secured_party|length > 80 %}…{% endif %}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+
+        {% if account.mca_funder_count >= 1 %}
+        <div class="bg-white rounded-lg shadow p-6 mt-6">
+            <h2 class="text-lg font-semibold mb-3">MCA lead</h2>
+            <p class="text-sm">
+                <a href="/dashboard/leads?state={{ account.state }}&debtor_name={{ account.display_name }}"
+                    class="text-blue-600 hover:underline">View on MCA leads</a>
+            </p>
+        </div>
+        {% endif %}
+    </div>
+</body>
+</html>

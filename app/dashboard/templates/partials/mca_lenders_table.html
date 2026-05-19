@@ -1,0 +1,90 @@
+<p class="text-sm text-gray-500 mb-4">
+    Showing {{ pagination.showing_from }}–{{ pagination.showing_to }} of {{ total }} alias{{ 'es' if total != 1 else '' }}
+</p>
+<table class="w-full text-sm">
+    <thead>
+        <tr class="text-left text-gray-500 border-b">
+            <th class="pb-2">Alias</th>
+            <th class="pb-2">Canonical</th>
+            <th class="pb-2">Class</th>
+            <th class="pb-2 text-right">Weight</th>
+            <th class="pb-2"></th>
+        </tr>
+    </thead>
+    <tbody>
+        {% for a in aliases %}
+        <tr class="border-b border-gray-100 align-top">
+            <td class="py-2 font-medium">{{ a.alias_name }}</td>
+            <td class="py-2 text-gray-700">{{ a.canonical_lender_name }}</td>
+            <td class="py-2"><span class="rounded bg-gray-100 px-2 py-0.5 text-xs">{{ a.lender_class }}</span></td>
+            <td class="py-2 text-right tabular-nums">{{ a.consolidation_weight if a.consolidation_weight is not none else '—' }}</td>
+            <td class="py-2 text-right">
+                <button type="button"
+                    class="text-xs text-blue-600 hover:underline"
+                    hx-get="#edit-{{ a.id }}"
+                    onclick="document.getElementById('edit-{{ a.id }}').classList.toggle('hidden')">
+                    Edit
+                </button>
+                <button type="button"
+                    class="text-xs text-red-600 hover:underline ml-2"
+                    hx-delete="/dashboard/mca-lenders/{{ a.id }}"
+                    hx-target="#aliases-results"
+                    hx-swap="innerHTML"
+                    hx-confirm="Delete this alias?">
+                    Delete
+                </button>
+            </td>
+        </tr>
+        <tr id="edit-{{ a.id }}" class="hidden bg-gray-50">
+            <td colspan="5" class="py-3 px-2">
+                <form class="grid grid-cols-1 md:grid-cols-4 gap-2"
+                    hx-post="/dashboard/mca-lenders/{{ a.id }}"
+                    hx-target="#aliases-results"
+                    hx-swap="innerHTML">
+                    <input name="alias_name" value="{{ a.alias_name }}" class="border rounded px-2 py-1 text-sm" required>
+                    <input name="canonical_lender_name" value="{{ a.canonical_lender_name }}" class="border rounded px-2 py-1 text-sm" required>
+                    <select name="lender_class" class="border rounded px-2 py-1 text-sm">
+                        <option value="mca_funder" {% if a.lender_class == 'mca_funder' %}selected{% endif %}>mca_funder</option>
+                        <option value="alternative_lender" {% if a.lender_class == 'alternative_lender' %}selected{% endif %}>alternative_lender</option>
+                        <option value="bank" {% if a.lender_class == 'bank' %}selected{% endif %}>bank</option>
+                        <option value="unknown" {% if a.lender_class == 'unknown' %}selected{% endif %}>unknown</option>
+                    </select>
+                    <div class="flex gap-2">
+                        <input name="consolidation_weight" type="number" step="0.1"
+                            value="{{ a.consolidation_weight if a.consolidation_weight is not none else '' }}"
+                            class="border rounded px-2 py-1 text-sm w-20" placeholder="wt">
+                        <button type="submit" class="text-sm bg-blue-600 text-white px-2 py-1 rounded">Update</button>
+                    </div>
+                </form>
+            </td>
+        </tr>
+        {% endfor %}
+    </tbody>
+</table>
+{% if not aliases %}
+<p class="text-gray-400">No aliases yet — add one above or run <code class="text-xs">scripts/seed_mca_aliases.py</code>.</p>
+{% endif %}
+<div class="mt-4 flex justify-between text-sm">
+    <div>
+        {% if pagination.prev_table %}
+        <a href="{{ pagination.prev_table }}"
+            hx-get="{{ pagination.prev_table }}"
+            hx-target="#aliases-results"
+            hx-swap="innerHTML"
+            class="text-blue-600 hover:underline">← Previous</a>
+        {% else %}
+        <span class="text-gray-300">← Previous</span>
+        {% endif %}
+    </div>
+    <div>
+        {% if pagination.next_table %}
+        <a href="{{ pagination.next_table }}"
+            hx-get="{{ pagination.next_table }}"
+            hx-target="#aliases-results"
+            hx-swap="innerHTML"
+            class="text-blue-600 hover:underline">Next →</a>
+        {% else %}
+        <span class="text-gray-300">Next →</span>
+        {% endif %}
+    </div>
+</div>

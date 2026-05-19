@@ -5,15 +5,29 @@
             <th class="pb-2 text-right">Filings in DB</th>
             <th class="pb-2 text-right">Leads</th>
             <th class="pb-2">Scraper run</th>
+            <th class="pb-2"></th>
         </tr>
     </thead>
     <tbody>
         {% for row in state_coverage %}
         <tr class="border-b border-gray-100">
-            <td class="py-2 font-medium">{{ row.state }}</td>
-            <td class="py-2 text-right tabular-nums">{{ row.filings }}</td>
-            <td class="py-2 text-right tabular-nums">{{ row.leads }}</td>
+            <td class="py-2 font-medium">
+                <a href="/dashboard/filings?state={{ row.state }}" class="text-blue-600 hover:underline">{{ row.state }}</a>
+            </td>
+            <td class="py-2 text-right tabular-nums">
+                <a href="/dashboard/filings?state={{ row.state }}" class="text-blue-600 hover:underline">{{ row.filings }}</a>
+            </td>
+            <td class="py-2 text-right tabular-nums">
+                {% if row.leads %}
+                <a href="/dashboard/leads?state={{ row.state }}" class="text-blue-600 hover:underline">{{ row.leads }}</a>
+                {% else %}
+                {{ row.leads }}
+                {% endif %}
+            </td>
             <td class="py-2 text-gray-600">{% if row.scraper_run %}yes{% else %}no{% endif %}</td>
+            <td class="py-2 text-right">
+                <a href="/dashboard/filings?state={{ row.state }}" class="text-xs text-blue-600 hover:underline">View filings</a>
+            </td>
         </tr>
         {% endfor %}
     </tbody>

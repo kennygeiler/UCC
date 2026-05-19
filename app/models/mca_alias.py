@@ -18,6 +18,8 @@ class MCAlias(Base):
     canonical_lender_name: Mapped[str] = mapped_column(Text, nullable=False)
     confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     source: Mapped[str | None] = mapped_column(Text, nullable=True)
+    lender_class: Mapped[str | None] = mapped_column(Text, nullable=True)
+    consolidation_weight: Mapped[float | None] = mapped_column(Float, nullable=True)
     added_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

@@ -154,7 +154,7 @@ async def stage_detect(state: str) -> list[dict]:
 
     leads = []
     for f in filings:
-        is_mca, canonical, confidence = await detect_mca(
+        is_mca, canonical, confidence, _match_type = await detect_mca(
             f.secured_party, f.collateral_description
         )
         if is_mca:

@@ -21,13 +21,18 @@ async def test_dashboard_home_includes_how_pipeline_works_modal() -> None:
     }
 
     with patch("app.dashboard.routes.get_dashboard_stats", AsyncMock(return_value=fake)):
-        transport = ASGITransport(app=app)
-        async with AsyncClient(transport=transport, base_url="http://test") as client:
-            response = await client.get("/dashboard/")
+        with patch(
+            "app.dashboard.routes.get_recent_scraper_runs",
+            AsyncMock(return_value=[]),
+        ):
+            transport = ASGITransport(app=app)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                response = await client.get("/dashboard/")
 
     assert response.status_code == 200
     body = response.text
     assert "How this pipeline works" in body
     assert 'id="pipeline-explainer"' in body
-    assert "How scrapers work" in body
-    assert "run_mca_pipeline" in body
+    assert "consolidation_score" in body
+    assert "reset_fl_data.py" in body
+    assert "/dashboard/accounts" in body

@@ -44,6 +44,7 @@ async def test_count_positions_filters_by_state():
                 secured_party=None,
                 filing_date=datetime.now(timezone.utc),
                 collateral_description=None,
+                is_mca=True,
             )
             session.add(f)
             await session.flush()
@@ -79,11 +80,17 @@ async def test_score_lead_async_path():
         await session.flush()
         ids.append(f.id)
 
+    async with get_session() as session:
+        f = await session.get(UCCFiling, ids[0])
+        f.is_mca = True
+
     out = await score_lead(
         debtor,
         "FL",
         datetime.now(timezone.utc),
         has_mca_collateral=False,
+        mca_match_confidence=0.9,
+        mca_match_type="exact",
     )
     assert out["tier"] == "cold"
     assert out["mca_position_count"] == 1

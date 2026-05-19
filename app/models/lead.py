@@ -20,6 +20,9 @@ class Lead(TimestampMixin, Base):
     lead_score: Mapped[float | None] = mapped_column(Float, nullable=True)
     mca_position_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
     mca_tier: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mca_match_type: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mca_lender_canonical: Mapped[str | None] = mapped_column(Text, nullable=True)
+    mca_match_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
     source_filing_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("ucc_filings.id"), nullable=True, unique=True
     )

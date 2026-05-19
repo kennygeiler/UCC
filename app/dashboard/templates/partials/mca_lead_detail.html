@@ -1,0 +1,41 @@
+<div class="border-t border-gray-200 bg-gray-50 px-4 py-4 text-sm">
+    {% from "partials/tier_badge.html" import consolidation_tier_badge %}
+    <div class="mb-3 flex flex-wrap items-center gap-2">
+        <span class="text-xs text-gray-500">Consolidation</span>
+        {{ consolidation_tier_badge(lead.consolidation_tier) }}
+        <span class="tabular-nums font-medium">
+            {% if lead.consolidation_score is not none %}{{ '%.1f'|format(lead.consolidation_score) }}{% else %}—{% endif %}
+        </span>
+        <span class="text-gray-400">· {{ lead.mca_funder_count }} MCA funder{{ 's' if lead.mca_funder_count != 1 else '' }}</span>
+        {% if lead.account_url %}
+        <a href="{{ lead.account_url }}" class="text-blue-600 hover:underline text-xs">Full account</a>
+        {% endif %}
+        <a href="{{ lead.filings_url }}" class="text-blue-600 hover:underline text-xs">Filings</a>
+    </div>
+
+    <h4 class="mb-2 font-medium text-gray-800">MCA funders on filings</h4>
+    {% if lead.mca_funders %}
+    <table class="w-full text-xs">
+        <thead>
+            <tr class="text-left text-gray-500 border-b">
+                <th class="pb-1">Secured party</th>
+                <th class="pb-1">Class</th>
+                <th class="pb-1">Filing</th>
+                <th class="pb-1">Date</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for f in lead.mca_funders %}
+            <tr class="border-b border-gray-100">
+                <td class="py-1.5 text-gray-800">{{ f.secured_party[:100] }}{% if f.secured_party|length > 100 %}…{% endif %}</td>
+                <td class="py-1.5"><span class="rounded bg-white px-1.5 py-0.5">{{ f.lender_class }}</span>{% if f.is_mca %}<span class="text-gray-400"> · detect_mca</span>{% endif %}</td>
+                <td class="py-1.5 font-mono">{{ f.filing_number or '—' }}</td>
+                <td class="py-1.5 text-gray-600">{{ f.filing_date or '—' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p class="text-gray-500">No MCA-classified filings linked yet.</p>
+    {% endif %}
+</div>

@@ -1,0 +1,29 @@
+{% macro consolidation_tier_badge(tier) -%}
+{% if tier == 'priority' %}
+<span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">Priority</span>
+{% elif tier == 'work' %}
+<span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">Work</span>
+{% elif tier == 'monitor' %}
+<span class="inline-flex items-center rounded-full bg-blue-100 px-2 py-0.5 text-xs font-medium text-blue-800">Monitor</span>
+{% elif tier == 'suppress' %}
+<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-600">Suppress</span>
+{% elif tier %}
+<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{{ tier }}</span>
+{% else %}
+<span class="text-gray-400">—</span>
+{% endif %}
+{%- endmacro %}
+
+{% macro tier_badge(tier) -%}
+{% if tier == 'hot' %}
+<span class="inline-flex items-center rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-800">Hot</span>
+{% elif tier == 'warm' %}
+<span class="inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-900">Warm</span>
+{% elif tier == 'cold' %}
+<span class="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-xs font-medium text-slate-700">Cold</span>
+{% elif tier %}
+<span class="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">{{ tier }}</span>
+{% else %}
+<span class="text-gray-400">—</span>
+{% endif %}
+{%- endmacro %}

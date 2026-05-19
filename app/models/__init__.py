@@ -1,5 +1,6 @@
 """SQLAlchemy ORM models for all 13 tables in the UCC pipeline database."""
 
+from app.models.account import BusinessAccount, ScraperCheckpoint
 from app.models.filing import UCCFiling
 from app.models.lead import Lead
 from app.models.mca_alias import MCAlias
@@ -19,6 +20,8 @@ from app.models.operations import (
 )
 
 __all__ = [
+    "BusinessAccount",
+    "ScraperCheckpoint",
     "UCCFiling",
     "Lead",
     "MCAlias",
