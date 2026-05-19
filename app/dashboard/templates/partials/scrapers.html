@@ -2,6 +2,7 @@
     <thead>
         <tr class="text-left text-gray-500 border-b">
             <th class="pb-2">State</th>
+            <th class="pb-2">Capability</th>
             <th class="pb-2">Status</th>
             <th class="pb-2 text-right">Records found</th>
             <th class="pb-2">Last run</th>
@@ -14,8 +15,16 @@
             <td class="py-2 font-medium">
                 <a href="{{ s.filings_url }}" class="text-blue-600 hover:underline">{{ s.state }}</a>
             </td>
+            <td class="py-2 text-xs text-gray-600">
+                {% if s.readiness == 'ready' %}Ready
+                {% elif s.readiness == 'playwright' %}Playwright
+                {% elif s.readiness == 'not_ready' %}Not implemented
+                {% else %}—{% endif %}
+            </td>
             <td class="py-2">
-                {% if s.status == 'completed' %}
+                {% if s.status == 'not_implemented' %}
+                <span class="text-amber-600">Not implemented</span>
+                {% elif s.status == 'completed' %}
                 <span class="text-green-600">Completed</span>
                 {% elif s.status == 'running' %}
                 <span class="text-blue-600">Running</span>

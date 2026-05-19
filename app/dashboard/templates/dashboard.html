@@ -16,18 +16,8 @@
                     <a href="/dashboard/filings" class="text-blue-600 hover:underline">Browse filings</a>
                 <a href="/dashboard/leads" class="text-blue-600 hover:underline">MCA leads</a>
                 <a href="/dashboard/mca-lenders" class="text-blue-600 hover:underline">MCA lenders</a>
-                <a href="/dashboard/accounts" class="text-blue-600 hover:underline">FL accounts</a>
+                <a href="/dashboard/accounts" class="text-blue-600 hover:underline">Accounts</a>
                 </nav>
-                <form hx-post="/dashboard/scrapers/FL/run"
-                    hx-target="#fl-scrape-status"
-                    hx-swap="innerHTML"
-                    class="inline">
-                    <button type="submit"
-                        class="inline-flex items-center rounded-lg bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
-                        {% if fl_scrape.running %}disabled{% endif %}>
-                        Run FL scrape
-                    </button>
-                </form>
                 <button type="button"
                     onclick="document.getElementById('pipeline-explainer').showModal()"
                     class="inline-flex shrink-0 items-center justify-center rounded-lg border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-800 shadow-sm hover:bg-gray-50">
@@ -73,6 +63,15 @@
             </div>
         </div>
 
+        <!-- Tier 1 manual scrapes -->
+        <div class="bg-white rounded-lg shadow p-6 mb-8">
+            <h2 class="text-xl font-semibold mb-2">Tier 1 states — manual scrape</h2>
+            <p class="text-sm text-gray-500 mb-4">
+                FL, CA, TX, NY, NJ are runnable today. GA, IL, OH, MD, PA are registered but not implemented (no fake stub runs).
+            </p>
+            {% include "partials/tier1_scrapers.html" %}
+        </div>
+
         <!-- Filings & leads by state -->
         <div class="bg-white rounded-lg shadow p-6 mb-8">
             <h2 class="text-xl font-semibold mb-4">Filings &amp; leads by state</h2>
@@ -82,16 +81,6 @@
             <div hx-get="/dashboard/state-coverage" hx-trigger="load, every 30s" hx-swap="innerHTML">
                 <p class="text-gray-400">Loading state coverage...</p>
             </div>
-        </div>
-
-        <div id="fl-scrape-status" class="mb-4 text-sm">
-            {% if fl_scrape.running %}
-            <p class="text-blue-600">FL scrape running…</p>
-            {% elif fl_scrape.last_error %}
-            <p class="text-red-600">Last FL scrape failed: {{ fl_scrape.last_error }}</p>
-            {% elif fl_scrape.last_result %}
-            <p class="text-green-700">Last FL scrape: {{ fl_scrape.last_result.status }} — {{ fl_scrape.last_result.get('inserted', 0) }} new filings</p>
-            {% endif %}
         </div>
 
         <!-- Scraper Status -->

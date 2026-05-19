@@ -2,6 +2,7 @@
     <thead>
         <tr class="text-left text-gray-500 border-b">
             <th class="pb-2">State</th>
+            <th class="pb-2">Tier 1</th>
             <th class="pb-2 text-right">Filings in DB</th>
             <th class="pb-2 text-right">Leads</th>
             <th class="pb-2">Scraper run</th>
@@ -13,6 +14,12 @@
         <tr class="border-b border-gray-100">
             <td class="py-2 font-medium">
                 <a href="/dashboard/filings?state={{ row.state }}" class="text-blue-600 hover:underline">{{ row.state }}</a>
+            </td>
+            <td class="py-2 text-xs text-gray-600">
+                {% if row.readiness == 'ready' %}ready
+                {% elif row.readiness == 'playwright' %}playwright
+                {% elif row.readiness == 'not_ready' %}blocked
+                {% else %}—{% endif %}
             </td>
             <td class="py-2 text-right tabular-nums">
                 <a href="/dashboard/filings?state={{ row.state }}" class="text-blue-600 hover:underline">{{ row.filings }}</a>

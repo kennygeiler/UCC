@@ -7,11 +7,14 @@ from app.scrapers.registry import (
     SCRAPER_REGISTRY,
     get_scraper_class,
     get_states_by_tier,
+    get_tier1_state_codes,
     schedulable_state_codes,
 )
+from app.scrapers.state_config import is_tier1_runnable
 
 
 EXPECTED_TIER1 = ["CA", "TX", "FL", "NY", "NJ", "GA", "IL", "PA", "OH", "MD"]
+
 EXPECTED_TIER3 = ["NH", "RI", "DE", "HI", "NV", "UT"]
 EXPECTED_TIER4 = ["DC", "NYC"]
 
@@ -64,6 +67,20 @@ def test_get_states_by_tier_returns_all_tier1():
     """get_states_by_tier(1) should return all 10 Tier 1 state codes."""
     states = get_states_by_tier(1)
     assert set(states) == set(EXPECTED_TIER1)
+
+
+def test_get_tier1_state_codes_matches_expected():
+    assert set(get_tier1_state_codes()) == set(EXPECTED_TIER1)
+
+
+@pytest.mark.parametrize("state", ["FL", "CA", "TX", "NY", "NJ"])
+def test_tier1_runnable_states(state):
+    assert is_tier1_runnable(state)
+
+
+@pytest.mark.parametrize("state", ["GA", "IL", "OH", "MD", "PA"])
+def test_tier1_not_ready_states(state):
+    assert not is_tier1_runnable(state)
 
 
 def test_get_states_by_tier_returns_all_tier3():

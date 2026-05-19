@@ -130,3 +130,16 @@ def get_states_by_tier(tier: int) -> list[str]:
         tier: Tier number (1–4). Tier 4 is stub-only (DC, NYC).
     """
     return [code for code, info in SCRAPER_REGISTRY.items() if info["tier"] == tier]
+
+
+def get_tier1_state_codes() -> list[str]:
+    """All Tier 1 state codes (sorted)."""
+    return sorted(get_states_by_tier(1))
+
+
+def registry_readiness(state_code: str) -> str | None:
+    """Tier 1 readiness label from state_config, or None for non–Tier 1."""
+    from app.scrapers.state_config import tier1_readiness
+
+    readiness = tier1_readiness(state_code)
+    return readiness.value if readiness else None

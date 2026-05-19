@@ -29,7 +29,13 @@ def test_build_search_url_for_every_schedulable_state(state_code):
 @pytest.mark.smoke
 @pytest.mark.parametrize(
     "state_code",
-    [c for c, i in SCRAPER_REGISTRY.items() if i["tier"] == 1],
+    [
+        c
+        for c, i in SCRAPER_REGISTRY.items()
+        if i["tier"] == 1
+        and SCRAPER_REGISTRY[c]["class"]().build_search_url().startswith("https://")
+        and "not-ready.invalid" not in SCRAPER_REGISTRY[c]["class"]().build_search_url()
+    ],
 )
 def test_tier1_live_search_url_reachable(state_code):
     """Optional live check: Tier 1 ``build_search_url`` looks like a real portal URL."""

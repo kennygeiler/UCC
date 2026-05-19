@@ -21,7 +21,7 @@ import re
 import httpx
 from playwright.async_api import async_playwright
 
-from app.scrapers.base import BaseScraper
+from app.scrapers.base_enriched import PostScrapeScraper
 from app.scrapers.parsers import parse_date
 from app.logging import get_logger
 
@@ -52,12 +52,17 @@ _VSG_RE = re.compile(r'id="__VIEWSTATEGENERATOR"\s+value="([^"]*)"')
 _EV_RE = re.compile(r'id="__EVENTVALIDATION"\s+value="([^"]*)"')
 
 
-class TexasScraper(BaseScraper):
+class TexasScraper(PostScrapeScraper):
     """Scraper for Texas UCC filings.
 
     Primary source: Harris County Clerk (Playwright).
     Fallback enrichment: TX SOS UCC Filing Tracker (httpx).
+    Post-scrape consolidation pipeline runs after persist.
     """
+
+    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
+        super().__init__(rate_limiter=rate_limiter)
+        self.run_consolidation = run_consolidation
 
     @property
     def state_code(self) -> str:
@@ -104,9 +109,7 @@ class TexasScraper(BaseScraper):
             except Exception as exc:
                 logger.info("sos_tracker_unavailable", error=str(exc)[:200])
 
-            count = await self._persist(filings)
-            await self._finish_run(run, count)
-            return count
+            return await self._finish_scrape_run(run, filings)
         except Exception as exc:
             await self._fail_run(run, exc)
             raise

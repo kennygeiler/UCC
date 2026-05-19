@@ -71,20 +71,30 @@ async def get_state_filing_lead_stats() -> list[dict]:
     leads_by_state = {row[0]: int(row[1]) for row in lead_rows.all()}
     scraper_states = {row[0] for row in run_states_result.all()}
 
-    all_states = sorted(set(filings_by_state) | set(leads_by_state) | scraper_states)
+    from app.scrapers.registry import get_tier1_state_codes, registry_readiness
+
+    all_states = sorted(
+        set(get_tier1_state_codes())
+        | set(filings_by_state)
+        | set(leads_by_state)
+        | scraper_states
+    )
     return [
         {
             "state": code,
             "filings": filings_by_state.get(code, 0),
             "leads": leads_by_state.get(code, 0),
             "scraper_run": code in scraper_states,
+            "readiness": registry_readiness(code),
         }
         for code in all_states
     ]
 
 
 async def get_scraper_status() -> list[dict]:
-    """Latest scraper run status per state."""
+    """Latest scraper run per state; Tier 1 always listed with readiness."""
+    from app.scrapers.registry import get_tier1_state_codes, registry_readiness
+
     async with get_session() as session:
         subq = (
             select(
@@ -103,18 +113,41 @@ async def get_scraper_status() -> list[dict]:
             )
             .order_by(ScraperRun.state)
         )
-        runs = result.scalars().all()
+        runs = {r.state: r for r in result.scalars().all()}
 
-    return [
-        {
-            "state": r.state,
-            "status": r.status,
-            "records_found": r.records_found or 0,
-            "last_run": r.started_at.isoformat() if r.started_at else "never",
-            "filings_url": f"/dashboard/filings?state={r.state}",
-        }
-        for r in runs
-    ]
+    tier1 = get_tier1_state_codes()
+    other_states = sorted(set(runs) - set(tier1))
+    ordered = tier1 + other_states
+
+    rows: list[dict] = []
+    for code in ordered:
+        readiness = registry_readiness(code)
+        r = runs.get(code)
+        if r is not None:
+            rows.append(
+                {
+                    "state": code,
+                    "status": r.status,
+                    "records_found": r.records_found or 0,
+                    "last_run": r.started_at.isoformat() if r.started_at else "never",
+                    "filings_url": f"/dashboard/filings?state={code}",
+                    "readiness": readiness,
+                    "runnable": readiness in ("ready", "playwright") if readiness else True,
+                }
+            )
+        elif readiness:
+            rows.append(
+                {
+                    "state": code,
+                    "status": "not_implemented",
+                    "records_found": 0,
+                    "last_run": "never",
+                    "filings_url": f"/dashboard/filings?state={code}",
+                    "readiness": readiness,
+                    "runnable": readiness in ("ready", "playwright"),
+                }
+            )
+    return rows
 
 
 async def get_recent_scraper_runs(limit: int = 10) -> list[dict]:

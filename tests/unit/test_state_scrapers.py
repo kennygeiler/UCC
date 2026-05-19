@@ -15,14 +15,27 @@ from app.scrapers.states.new_york import NewYorkScraper
 from app.scrapers.states.ohio import OhioScraper
 from app.scrapers.states.pennsylvania import PennsylvaniaScraper
 from app.scrapers.states.texas import TexasScraper
+from app.scrapers.tier1_not_ready import Tier1NotReadyScraper
 
-# These Tier-1 scrapers implement scrape() via API/Playwright; `parse_response` is a stub.
+# Tier-1 scrapers that implement scrape() via API/Playwright; `parse_response` is a stub.
 _SKIP_HTML_PARSE = (
     CaliforniaScraper,
     NewJerseyScraper,
     TexasScraper,
     NewYorkScraper,
+    GeorgiaScraper,
+    IllinoisScraper,
+    OhioScraper,
+    MarylandScraper,
+    PennsylvaniaScraper,
 )
+
+
+def _skip_if_no_html_parse(scraper_cls: type) -> None:
+    if scraper_cls in _SKIP_HTML_PARSE:
+        pytest.skip("parse_response is unused; scraper uses API/Playwright or not ready")
+    if issubclass(scraper_cls, Tier1NotReadyScraper):
+        pytest.skip("Tier 1 not ready — scrape refused")
 
 
 def _make_sample_html(filing_num: str, debtor: str, secured: str) -> str:
@@ -92,7 +105,7 @@ def _make_fl_api_json(ucc_number: str, debtor: str) -> str:
     })
 
 
-# Scrapers that use standard HTML table layout (filing_date in col 1)
+# Property tests for all Tier 1 scraper classes (parse tests skip via _skip_if_no_html_parse).
 SCRAPERS_STANDARD = [
     (CaliforniaScraper, "CA", "CA-2024-001"),
     (NewJerseyScraper, "NJ", "NJ-2024-001"),
@@ -100,7 +113,6 @@ SCRAPERS_STANDARD = [
     (OhioScraper, "OH", "OH-2024-001"),
 ]
 
-# Scrapers that use alt HTML table layout (debtor_name in col 1)
 SCRAPERS_ALT = [
     (TexasScraper, "TX", "TX-2024-001"),
     (NewYorkScraper, "NY", "NY-2024-001"),
@@ -139,8 +151,7 @@ def test_florida_scraper_properties():
 @pytest.mark.parametrize("scraper_cls,state,filing_num", SCRAPERS_STANDARD)
 def test_standard_scraper_parse(scraper_cls, state, filing_num):
     """Standard-layout scrapers should parse sample HTML correctly."""
-    if scraper_cls in _SKIP_HTML_PARSE:
-        pytest.skip("parse_response is unused; scraper uses API/Playwright")
+    _skip_if_no_html_parse(scraper_cls)
     scraper = scraper_cls()
     html = _make_sample_html(filing_num, "Test Corp", "Lender LLC")
     filings = scraper.parse_response(html)
@@ -154,8 +165,7 @@ def test_standard_scraper_parse(scraper_cls, state, filing_num):
 @pytest.mark.parametrize("scraper_cls,state,filing_num", SCRAPERS_ALT)
 def test_alt_scraper_parse(scraper_cls, state, filing_num):
     """Alt-layout scrapers should parse sample HTML correctly."""
-    if scraper_cls in _SKIP_HTML_PARSE:
-        pytest.skip("parse_response is unused; scraper uses API/Playwright")
+    _skip_if_no_html_parse(scraper_cls)
     scraper = scraper_cls()
     html = _make_alt_html(filing_num, "Acme Inc", "Bank of X")
     filings = scraper.parse_response(html)

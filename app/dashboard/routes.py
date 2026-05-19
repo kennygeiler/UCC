@@ -25,6 +25,13 @@ from app.dashboard.queries import (
     search_leads,
 )
 from app.logging import get_logger
+from app.scrapers.registry import get_scraper_class
+from app.scrapers.state_config import (
+    all_tier1_dashboard_rows,
+    is_tier1_runnable,
+    tier1_not_ready_reason,
+    tier1_readiness,
+)
 
 logger = get_logger("dashboard")
 
@@ -34,11 +41,19 @@ templates = Jinja2Templates(directory="app/dashboard/templates")
 
 LEAD_TIER_CHIPS = CONSOLIDATION_TIERS
 
-_fl_scrape_status: dict = {
+_DEFAULT_SCRAPE_STATUS = {
     "running": False,
     "last_result": None,
     "last_error": None,
 }
+_scrape_status: dict[str, dict] = {}
+
+
+def _status_for_state(state_code: str) -> dict:
+    code = state_code.strip().upper()
+    if code not in _scrape_status:
+        _scrape_status[code] = dict(_DEFAULT_SCRAPE_STATUS)
+    return _scrape_status[code]
 
 
 @router.get("/", response_class=HTMLResponse)
@@ -46,57 +61,95 @@ async def dashboard_home(request: Request):
     """Main dashboard view — pipeline health overview."""
     stats = await get_dashboard_stats()
     recent_runs = await get_recent_scraper_runs(limit=8)
+    tier1_states = all_tier1_dashboard_rows()
+    for row in tier1_states:
+        row["scrape_status"] = _status_for_state(row["state"])
     return templates.TemplateResponse(
         request,
         "dashboard.html",
         context={
             **stats,
             "recent_scraper_runs": recent_runs,
-            "fl_scrape": dict(_fl_scrape_status),
+            "fl_scrape": _status_for_state("FL"),
+            "tier1_states": tier1_states,
         },
     )
 
 
-async def _run_fl_scrape_job() -> None:
-    """Background FL scrape + consolidation pipeline."""
-    from app.scrapers.states.florida import FloridaScraper
-
-    _fl_scrape_status["running"] = True
-    _fl_scrape_status["last_error"] = None
+async def _run_state_scrape_job(state_code: str) -> None:
+    """Background scrape + consolidation pipeline for one state."""
+    code = state_code.strip().upper()
+    status = _status_for_state(code)
+    status["running"] = True
+    status["last_error"] = None
     try:
-        scraper = FloridaScraper()
+        scraper_cls = get_scraper_class(code)
+        if scraper_cls is None:
+            raise ValueError(f"No scraper registered for {code}")
+        scraper = scraper_cls()
         count = await scraper.scrape()
-        _fl_scrape_status["last_result"] = {
+        status["last_result"] = {
             "inserted": count,
             "status": "completed",
         }
     except Exception as exc:
-        logger.error("fl_scrape_failed", error=str(exc))
-        _fl_scrape_status["last_error"] = str(exc)[:500]
-        _fl_scrape_status["last_result"] = {"status": "failed"}
+        logger.error("state_scrape_failed", state=code, error=str(exc))
+        status["last_error"] = str(exc)[:500]
+        status["last_result"] = {"status": "failed"}
     finally:
-        _fl_scrape_status["running"] = False
+        status["running"] = False
+
+
+@router.post("/scrapers/{state_code}/run")
+async def run_state_scraper(
+    state_code: str,
+    request: Request,
+    background_tasks: BackgroundTasks,
+):
+    """Manually trigger a Tier 1 state scrape (no scheduler)."""
+    code = state_code.strip().upper()
+    readiness = tier1_readiness(code)
+    if readiness is None:
+        return JSONResponse({"error": "not_tier1"}, status_code=404)
+
+    if not is_tier1_runnable(code):
+        reason = tier1_not_ready_reason(code)
+        msg = f'<p class="text-amber-700">{code} not implemented: {reason}</p>'
+        if request.headers.get("HX-Request"):
+            return HTMLResponse(msg, status_code=400)
+        return JSONResponse({"status": "not_ready", "reason": reason}, status_code=400)
+
+    status = _status_for_state(code)
+    if status.get("running"):
+        msg = f'<p class="text-amber-600">{code} scrape already running.</p>'
+        if request.headers.get("HX-Request"):
+            return HTMLResponse(msg, status_code=409)
+        return JSONResponse({"status": "already_running"}, status_code=409)
+
+    background_tasks.add_task(_run_state_scrape_job, code)
+    msg = f'<p class="text-blue-600">{code} scrape started — refresh in a few minutes.</p>'
+    if request.headers.get("HX-Request"):
+        return HTMLResponse(msg)
+    return JSONResponse({"status": "started", "state": code})
 
 
 @router.post("/scrapers/FL/run")
 async def run_fl_scraper(request: Request, background_tasks: BackgroundTasks):
-    """Manually trigger Florida scrape (no scheduler)."""
-    if _fl_scrape_status.get("running"):
-        msg = '<p class="text-amber-600">FL scrape already running.</p>'
-        if request.headers.get("HX-Request"):
-            return HTMLResponse(msg, status_code=409)
-        return JSONResponse({"status": "already_running"}, status_code=409)
-    background_tasks.add_task(_run_fl_scrape_job)
-    msg = '<p class="text-blue-600">FL scrape started — refresh in a few minutes.</p>'
-    if request.headers.get("HX-Request"):
-        return HTMLResponse(msg)
-    return JSONResponse({"status": "started"})
+    """Back-compat alias for Florida manual scrape."""
+    return await run_state_scraper("FL", request, background_tasks)
+
+
+@router.get("/scrapers/{state_code}/status")
+async def state_scraper_status(state_code: str):
+    """JSON status for HTMX polling after manual scrape."""
+    code = state_code.strip().upper()
+    return JSONResponse(_status_for_state(code))
 
 
 @router.get("/scrapers/FL/status")
 async def fl_scraper_status():
-    """JSON status for HTMX polling after manual FL run."""
-    return JSONResponse(dict(_fl_scrape_status))
+    """Back-compat alias for Florida scrape status."""
+    return await state_scraper_status("FL")
 
 
 @router.get("/scrapers", response_class=HTMLResponse)

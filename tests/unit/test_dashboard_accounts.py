@@ -31,12 +31,13 @@ async def test_dashboard_accounts_and_fl_run_routes() -> None:
     with patch("app.dashboard.routes.get_dashboard_stats", AsyncMock(return_value=fake_stats)), \
          patch("app.dashboard.routes.get_recent_scraper_runs", AsyncMock(return_value=[])), \
          patch("app.dashboard.routes.search_accounts", AsyncMock(return_value=fake_accounts)), \
-         patch("app.dashboard.routes._run_fl_scrape_job", AsyncMock()):
+         patch("app.dashboard.routes._run_state_scrape_job", AsyncMock()):
         transport = ASGITransport(app=app)
         async with AsyncClient(transport=transport, base_url="http://test") as client:
             home = await client.get("/dashboard/")
             assert home.status_code == 200
-            assert "Run FL scrape" in home.text
+            assert "Tier 1 states" in home.text
+            assert "Run FL" in home.text
 
             accounts = await client.get("/dashboard/accounts")
             assert accounts.status_code == 200

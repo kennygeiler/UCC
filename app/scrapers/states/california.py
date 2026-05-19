@@ -13,7 +13,7 @@ filings within a rolling date window.
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
-from app.scrapers.playwright_base import PlaywrightBaseScraper
+from app.scrapers.base_enriched import PlaywrightPostScrapeScraper
 from app.scrapers.parsers import parse_date
 from app.logging import get_logger
 
@@ -34,13 +34,16 @@ _SEARCH_TERMS = [
     "CAPITAL ONE",
 ]
 
-class CaliforniaScraper(PlaywrightBaseScraper):
+class CaliforniaScraper(PlaywrightPostScrapeScraper):
     """Scraper for California Secretary of State UCC filings.
 
-    Subclasses :class:`PlaywrightBaseScraper` and uses
-    :meth:`PlaywrightBaseScraper.playwright_chromium_session` for the
-    WAF + in-browser JSON API flow (no duplicate ``async_playwright`` entry).
+    Uses :meth:`playwright_chromium_session` for the WAF + in-browser JSON API flow.
+    Post-scrape: classify → rollup accounts → consolidation score → MCA pipeline.
     """
+
+    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
+        super().__init__(rate_limiter=rate_limiter)
+        self.run_consolidation = run_consolidation
 
     @property
     def state_code(self) -> str:
@@ -80,9 +83,7 @@ class CaliforniaScraper(PlaywrightBaseScraper):
         run = await self._start_run()
         try:
             filings = await self._fetch_filings()
-            count = await self._persist(filings)
-            await self._finish_run(run, count)
-            return count
+            return await self._finish_scrape_run(run, filings)
         except Exception as exc:
             await self._fail_run(run, exc)
             raise

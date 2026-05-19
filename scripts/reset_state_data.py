@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Reset Florida-scoped pipeline data before a fresh manual scrape."""
+"""Reset pipeline data for one state before a fresh manual scrape."""
 
 from __future__ import annotations
 
@@ -18,17 +18,17 @@ load_dotenv(PROJECT_ROOT / ".env")
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Delete FL filings, accounts, leads, scraper runs, and checkpoints."
+        description="Delete state-scoped filings, accounts, leads, scraper runs, checkpoints."
+    )
+    parser.add_argument(
+        "--state",
+        required=True,
+        help="Two-letter state code (e.g. FL, CA).",
     )
     parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Print counts only; do not delete.",
-    )
-    parser.add_argument(
-        "--state",
-        default="FL",
-        help="State code (default FL). Prefer scripts/reset_state_data.py --state XX.",
     )
     return parser.parse_args()
 

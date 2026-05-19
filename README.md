@@ -25,7 +25,35 @@ python -m alembic upgrade head
 uvicorn app.main:app --reload --port 8000
 ```
 
-Open **http://localhost:8000/dashboard/** for stats, Florida scrape trigger, and the **How this pipeline works** guide.
+Open **http://localhost:8000/dashboard/** for Tier 1 scrape triggers, stats, and the **How this pipeline works** guide.
+
+## Tier 1 states (manual scrape)
+
+| State | Status | Notes |
+|-------|--------|-------|
+| **FL** | Ready | REST API deep pagination, secured-party enrichment, checkpoints |
+| **CA** | Playwright | `playwright install chromium` — bizfile JSON API after WAF |
+| **TX** | Playwright | Harris County + optional SOS tracker |
+| **NY** | Playwright | Lien search; secured_party not on results grid |
+| **NJ** | Playwright | Non-certified search; secured_party not on grid |
+| **GA, IL, OH, MD, PA** | Not implemented | Registered in dashboard; scrape refused (no fake HTML stub runs) |
+
+Runnable states run the same post-scrape pipeline as Florida: classify filings → rollup `business_accounts` → consolidation score → MCA lead accounts.
+
+```bash
+# One state
+python scripts/run_state_scrape.py --state FL
+python scripts/run_state_scrape.py --state CA   # needs Playwright + Chromium
+
+# All ready Tier 1 (FL, CA, TX, NY, NJ) sequentially
+python scripts/run_tier1_scrape.py
+
+# Reset before fresh scrape (any state)
+python scripts/reset_state_data.py --state FL --dry-run
+python scripts/reset_state_data.py --state CA
+```
+
+Dashboard: **Tier 1 states — manual scrape** on `/dashboard/` (`POST /dashboard/scrapers/{STATE}/run`).
 
 ## Manual Florida scrape workflow
 
@@ -58,7 +86,7 @@ Florida is **manual-only** (no scheduler job). Standard mode paginates `rowNumbe
    python scripts/report_fl_data.py
    ```
 
-Dashboard alternative: **Run Florida scraper** on `/dashboard/` (`POST /dashboard/scrapers/FL/run`, background task).
+Dashboard alternative: **Run FL** (or other Tier 1) on `/dashboard/` (`POST /dashboard/scrapers/FL/run`, background task).
 
 ### Florida env vars
 

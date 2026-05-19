@@ -34,6 +34,10 @@ async def test_get_state_filing_lead_stats_unions_states(monkeypatch: pytest.Mon
         yield Sess()
 
     monkeypatch.setattr(dq, "get_session", fake_get_session)
+    monkeypatch.setattr(
+        "app.scrapers.registry.get_tier1_state_codes",
+        lambda: [],
+    )
 
     rows = await dq.get_state_filing_lead_stats()
     by_state = {r["state"]: r for r in rows}

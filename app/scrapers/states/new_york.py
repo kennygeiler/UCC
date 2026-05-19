@@ -17,7 +17,7 @@ does not cover this flow yet.
 
 from playwright.async_api import async_playwright
 
-from app.scrapers.base import BaseScraper
+from app.scrapers.base_enriched import PostScrapeScraper
 from app.scrapers.parsers import parse_date
 from app.logging import get_logger
 
@@ -47,11 +47,16 @@ _COL_FILING_DATE = 6
 _COL_LIEN_STATUS = 8
 
 
-class NewYorkScraper(BaseScraper):
+class NewYorkScraper(PostScrapeScraper):
     """Scraper for New York Secretary of State UCC filings.
 
     Uses Playwright to interact with the Cenuity Online Lien Search portal.
+    Secured party is not on the results grid — enrichment would need detail pages.
     """
+
+    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
+        super().__init__(rate_limiter=rate_limiter)
+        self.run_consolidation = run_consolidation
 
     @property
     def state_code(self) -> str:
@@ -86,9 +91,7 @@ class NewYorkScraper(BaseScraper):
         run = await self._start_run()
         try:
             filings = await self._fetch_filings()
-            count = await self._persist(filings)
-            await self._finish_run(run, count)
-            return count
+            return await self._finish_scrape_run(run, filings)
         except Exception as exc:
             await self._fail_run(run, exc)
             raise

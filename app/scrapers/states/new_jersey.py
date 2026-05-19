@@ -14,7 +14,7 @@ keep isolated until a proven shared primitive exists (see ADR-011).
 
 from playwright.async_api import async_playwright
 
-from app.scrapers.base import BaseScraper
+from app.scrapers.base_enriched import PostScrapeScraper
 from app.scrapers.parsers import parse_date
 from app.logging import get_logger
 
@@ -35,12 +35,16 @@ _SEARCH_TERMS = [
 ]
 
 
-class NewJerseyScraper(BaseScraper):
+class NewJerseyScraper(PostScrapeScraper):
     """Scraper for New Jersey Secretary of State UCC filings.
 
-    Uses Playwright to interact with the ASP.NET WebForms portal
-    and parse results from the non-certified search.
+    Uses Playwright to interact with the ASP.NET WebForms portal.
+    Secured party is not on the non-certified search grid.
     """
+
+    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
+        super().__init__(rate_limiter=rate_limiter)
+        self.run_consolidation = run_consolidation
 
     @property
     def state_code(self) -> str:
@@ -71,9 +75,7 @@ class NewJerseyScraper(BaseScraper):
         run = await self._start_run()
         try:
             filings = await self._fetch_filings()
-            count = await self._persist(filings)
-            await self._finish_run(run, count)
-            return count
+            return await self._finish_scrape_run(run, filings)
         except Exception as exc:
             await self._fail_run(run, exc)
             raise
