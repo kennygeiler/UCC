@@ -4,6 +4,8 @@
             <th class="pb-2">State</th>
             <th class="pb-2">Capability</th>
             <th class="pb-2">Run</th>
+            <th class="pb-2">DB filings</th>
+            <th class="pb-2">Quality</th>
             <th class="pb-2">Last manual run</th>
         </tr>
     </thead>
@@ -22,6 +24,20 @@
                 <span class="text-amber-700 font-medium">Not implemented</span>
                 {% endif %}
                 <p class="text-xs mt-1">{{ row.notes }}</p>
+            </td>
+            <td class="py-2 text-xs text-gray-600">
+                {{ row.filings_total | default(0) }}
+                {% if row.last_run_inserted is defined %}
+                <span class="text-gray-400">(last +{{ row.last_run_inserted }})</span>
+                {% endif %}
+            </td>
+            <td class="py-2 text-xs text-gray-600">
+                {% if row.filings_total | default(0) > 0 %}
+                {{ row.pct_secured_party | default(0) }}% secured ·
+                {{ row.pct_filing_date | default(0) }}% dated
+                {% else %}
+                —
+                {% endif %}
             </td>
             <td class="py-2">
                 {% if row.runnable %}

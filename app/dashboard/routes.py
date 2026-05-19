@@ -20,6 +20,7 @@ from app.dashboard.queries import (
     get_recent_scraper_runs,
     get_scraper_status,
     get_state_filing_lead_stats,
+    get_tier1_filing_quality,
     search_accounts,
     search_filings,
     search_leads,
@@ -62,8 +63,10 @@ async def dashboard_home(request: Request):
     stats = await get_dashboard_stats()
     recent_runs = await get_recent_scraper_runs(limit=8)
     tier1_states = all_tier1_dashboard_rows()
+    quality = await get_tier1_filing_quality()
     for row in tier1_states:
         row["scrape_status"] = _status_for_state(row["state"])
+        row.update(quality.get(row["state"], {}))
     return templates.TemplateResponse(
         request,
         "dashboard.html",

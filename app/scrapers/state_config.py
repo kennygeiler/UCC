@@ -43,10 +43,10 @@ TIER1_READINESS: dict[str, ScraperReadiness] = {
 
 TIER1_OPERATOR_NOTES: dict[str, str] = {
     "FL": "REST API deep pagination, secured-party enrichment, checkpoints.",
-    "CA": "Playwright + bizfile JSON API; secured_party from search rows.",
-    "TX": "Playwright Harris County + optional SOS tracker merge.",
-    "NY": "Playwright lien search; secured_party not on results grid (debtor-only).",
-    "NJ": "Playwright non-certified search; secured_party not on results grid.",
+    "CA": "Playwright + bizfile JSON API; MCA terms; secured_party on API rows; env caps.",
+    "TX": "Playwright Harris County + SOS tracker; MCA terms; env row caps.",
+    "NY": "Playwright lien search; MCA terms; pagination; optional detail for secured_party.",
+    "NJ": "Playwright non-certified search; MCA terms; pagination; env caps.",
     "GA": "HTML stub URL not live — needs GA eCorp UCC portal research.",
     "IL": "HTML stub URL not live — needs IL SOS UCC portal research.",
     "OH": "HTML stub URL not live — needs OH SOS UCC portal research.",

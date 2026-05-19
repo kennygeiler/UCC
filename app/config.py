@@ -63,6 +63,37 @@ class Settings(BaseSettings):
     # Deprecated: Standard mode ignores text; kept for backwards-compatible env only.
     FL_SCRAPE_SEARCH_TERMS: str = ""
 
+    # Playwright Tier 1 (NY, NJ, CA, TX) — shared defaults; per-state overrides below.
+    PLAYWRIGHT_SCRAPE_MAX_PAGES: int = 50
+    PLAYWRIGHT_SCRAPE_MAX_TERMS: int = 20
+    PLAYWRIGHT_SCRAPE_MCA_TERM_LIMIT: int = 20
+    PLAYWRIGHT_SCRAPE_FETCH_DETAIL: bool = True
+    PLAYWRIGHT_SCRAPE_SEARCH_TERMS: str = ""
+
+    NY_SCRAPE_MAX_PAGES: int = 50
+    NY_SCRAPE_MAX_TERMS: int = 20
+    NY_SCRAPE_MCA_TERM_LIMIT: int = 20
+    NY_SCRAPE_FETCH_DETAIL: bool = True
+    NY_SCRAPE_SEARCH_TERMS: str = ""
+    NY_SCRAPE_PAGE_CAP_PER_RUN: int | None = None
+
+    NJ_SCRAPE_MAX_PAGES: int = 50
+    NJ_SCRAPE_MAX_TERMS: int = 20
+    NJ_SCRAPE_MCA_TERM_LIMIT: int = 20
+    NJ_SCRAPE_FETCH_DETAIL: bool = False
+    NJ_SCRAPE_SEARCH_TERMS: str = ""
+
+    CA_SCRAPE_MAX_PAGES: int = 50
+    CA_SCRAPE_MAX_TERMS: int = 20
+    CA_SCRAPE_MCA_TERM_LIMIT: int = 20
+    CA_SCRAPE_SEARCH_TERMS: str = ""
+    CA_SCRAPE_PAGE_CAP_PER_RUN: int | None = None
+
+    TX_SCRAPE_MAX_PAGES: int = 50
+    TX_SCRAPE_MAX_TERMS: int = 20
+    TX_SCRAPE_MCA_TERM_LIMIT: int = 20
+    TX_SCRAPE_SEARCH_TERMS: str = ""
+
     # MCA detector — fuzzy alias match (after exact match; O(n) over alias rows)
     MCA_FUZZY_MIN_ALIAS_LEN: int = 5
     MCA_FUZZY_SCORE_CUTOFF: int = 90

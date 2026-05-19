@@ -13,37 +13,33 @@ filings within a rolling date window.
 from datetime import datetime, timedelta, timezone
 
 from app.config import Settings
-from app.scrapers.base_enriched import PlaywrightPostScrapeScraper
 from app.scrapers.parsers import parse_date
+from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
+from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 from app.logging import get_logger
 
 logger = get_logger("ca_scraper")
 
-# Common secured-party names that appear frequently in CA UCC filings.
-# Searching by these covers a large portion of daily filings.
-_SEARCH_TERMS = [
-    "WELLS FARGO",
-    "JPMORGAN",
-    "BANK OF AMERICA",
-    "US BANK",
-    "CATERPILLAR",
-    "JOHN DEERE",
-    "DE LAGE LANDEN",
-    "CIT BANK",
-    "TOYOTA",
-    "CAPITAL ONE",
-]
 
-class CaliforniaScraper(PlaywrightPostScrapeScraper):
+class CaliforniaScraper(PlaywrightTier1Scraper):
     """Scraper for California Secretary of State UCC filings.
 
     Uses :meth:`playwright_chromium_session` for the WAF + in-browser JSON API flow.
     Post-scrape: classify → rollup accounts → consolidation score → MCA pipeline.
     """
 
-    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
-        super().__init__(rate_limiter=rate_limiter)
-        self.run_consolidation = run_consolidation
+    def __init__(
+        self,
+        rate_limiter=None,
+        *,
+        run_consolidation: bool = True,
+        scrape_settings: PlaywrightScrapeSettings | None = None,
+    ) -> None:
+        super().__init__(
+            rate_limiter=rate_limiter,
+            run_consolidation=run_consolidation,
+            scrape_settings=scrape_settings,
+        )
 
     @property
     def state_code(self) -> str:
@@ -78,17 +74,7 @@ class CaliforniaScraper(PlaywrightPostScrapeScraper):
         # _fetch is not used directly; scrape() is overridden.
         return ""
 
-    async def scrape(self) -> int:
-        """Execute a full scrape: pass WAF, query API, deduplicate, persist."""
-        run = await self._start_run()
-        try:
-            filings = await self._fetch_filings()
-            return await self._finish_scrape_run(run, filings)
-        except Exception as exc:
-            await self._fail_run(run, exc)
-            raise
-
-    async def _fetch_filings(self) -> list[dict]:
+    async def _fetch_filings_playwright(self) -> list[dict]:
         """Pass WAF and call the JSON API for each search term."""
         await self.rate_limiter.wait(self.state_code, tier=self.tier)
 
@@ -124,7 +110,8 @@ class CaliforniaScraper(PlaywrightPostScrapeScraper):
 
             logger.info("waf_passed", state=self.state_code, html_len=len(html))
 
-            for term in _SEARCH_TERMS:
+            terms = await self._load_search_terms()
+            for term in terms:
                 try:
                     rows = await self._api_search(
                         page, term, start_str, end_str

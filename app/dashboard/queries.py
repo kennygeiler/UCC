@@ -91,6 +91,62 @@ async def get_state_filing_lead_stats() -> list[dict]:
     ]
 
 
+async def get_tier1_filing_quality() -> dict[str, dict]:
+    """Per Tier 1 state: filing counts and secured_party / filing_date coverage."""
+    from app.scrapers.state_config import TIER1_STATE_CODES
+
+    async with get_session() as session:
+        filing_stats = await session.execute(
+            select(
+                UCCFiling.state,
+                func.count(UCCFiling.id),
+                func.count(UCCFiling.secured_party),
+                func.count(UCCFiling.filing_date),
+            ).group_by(UCCFiling.state)
+        )
+    by_state: dict[str, dict] = {}
+    for state, total, secured, dated in filing_stats.all():
+        total_i = int(total or 0)
+        by_state[state] = {
+            "filings_total": total_i,
+            "pct_secured_party": round(100.0 * int(secured or 0) / total_i, 1)
+            if total_i
+            else 0.0,
+            "pct_filing_date": round(100.0 * int(dated or 0) / total_i, 1) if total_i else 0.0,
+        }
+
+    for code in TIER1_STATE_CODES:
+        by_state.setdefault(
+            code,
+            {"filings_total": 0, "pct_secured_party": 0.0, "pct_filing_date": 0.0},
+        )
+
+    # Latest run per state (simpler query)
+    async with get_session() as session:
+        subq = (
+            select(
+                ScraperRun.state,
+                func.max(ScraperRun.started_at).label("last_run"),
+            )
+            .group_by(ScraperRun.state)
+            .subquery()
+        )
+        latest = await session.execute(
+            select(ScraperRun.state, ScraperRun.records_found, ScraperRun.status)
+            .join(
+                subq,
+                (ScraperRun.state == subq.c.state)
+                & (ScraperRun.started_at == subq.c.last_run),
+            )
+        )
+        for state, records_found, status in latest.all():
+            entry = by_state.setdefault(state, {})
+            entry["last_run_inserted"] = int(records_found or 0)
+            entry["last_run_status"] = status
+
+    return by_state
+
+
 async def get_scraper_status() -> list[dict]:
     """Latest scraper run per state; Tier 1 always listed with readiness."""
     from app.scrapers.registry import get_tier1_state_codes, registry_readiness

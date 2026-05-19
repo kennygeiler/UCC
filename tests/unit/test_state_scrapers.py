@@ -237,11 +237,11 @@ def test_scraper_build_search_url(scraper_cls, state, filing_num):
 async def test_scraper_fetch_mocked_httpx():
     """BaseScraper _fetch should use httpx with rate limiting (non-Playwright scrapers)."""
     from app.scrapers.rate_limiter import RateLimiter
-    from app.scrapers.states.new_jersey import NewJerseyScraper
+    from app.scrapers.states.illinois import IllinoisScraper
 
     rl = RateLimiter(base_delay=0.0, jitter_pct=0.0)
-    scraper = NewJerseyScraper(rate_limiter=rl)
-    html = _make_sample_html("NJ-2024-001", "Corp", "Bank")
+    scraper = IllinoisScraper(rate_limiter=rl)
+    html = _make_sample_html("IL-2024-001", "Corp", "Bank")
 
     mock_response = MagicMock()
     mock_response.text = html
@@ -255,7 +255,7 @@ async def test_scraper_fetch_mocked_httpx():
         mock_cls.return_value = mock_client
 
         result = await scraper._fetch()
-        assert "NJ-2024-001" in result
+        assert "IL-2024-001" in result
 
 
 @pytest.mark.asyncio

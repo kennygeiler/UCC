@@ -15,6 +15,8 @@ from dotenv import load_dotenv
 
 load_dotenv(PROJECT_ROOT / ".env")
 
+_PLAYWRIGHT_STATES = frozenset({"CA", "TX", "NY", "NJ"})
+
 
 def _parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(description="Manual state scrape + post pipeline.")
@@ -27,9 +29,34 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--quick",
         action="store_true",
-        help="FL only: small page caps for tests.",
+        help="Low caps for smoke tests (FL or Playwright Tier 1).",
+    )
+    parser.add_argument(
+        "--max-pages",
+        type=int,
+        default=None,
+        help="Override max pages per search term (Playwright Tier 1).",
+    )
+    parser.add_argument(
+        "--max-terms",
+        type=int,
+        default=None,
+        help="Override max search terms per run (Playwright Tier 1).",
     )
     return parser.parse_args()
+
+
+def _playwright_quick_settings(state: str, *, max_pages: int | None, max_terms: int | None):
+    from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
+
+    return PlaywrightScrapeSettings(
+        max_pages=max_pages if max_pages is not None else 2,
+        max_terms=max_terms if max_terms is not None else 3,
+        fetch_detail=False,
+        mca_term_limit=3,
+        extra_search_terms=(),
+        page_cap_per_run=2,
+    )
 
 
 async def main() -> int:
@@ -65,6 +92,32 @@ async def main() -> int:
             run_consolidation=not args.no_consolidation,
         )
         scraper = FloridaScraper(**kwargs)
+    elif state in _PLAYWRIGHT_STATES and (
+        args.quick or args.max_pages is not None or args.max_terms is not None
+    ):
+        from app.scrapers.playwright_tier1.settings import (
+            PlaywrightScrapeSettings,
+            load_playwright_scrape_settings,
+        )
+
+        if args.quick:
+            settings = _playwright_quick_settings(
+                state,
+                max_pages=args.max_pages,
+                max_terms=args.max_terms,
+            )
+        else:
+            base = load_playwright_scrape_settings(state)
+            settings = PlaywrightScrapeSettings(
+                max_pages=args.max_pages if args.max_pages is not None else base.max_pages,
+                max_terms=args.max_terms if args.max_terms is not None else base.max_terms,
+                fetch_detail=base.fetch_detail,
+                mca_term_limit=base.mca_term_limit,
+                extra_search_terms=base.extra_search_terms,
+                page_cap_per_run=base.page_cap_per_run,
+            )
+        kwargs["scrape_settings"] = settings
+        scraper = scraper_cls(**kwargs)
     else:
         try:
             scraper = scraper_cls(**kwargs)

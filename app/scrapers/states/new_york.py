@@ -1,62 +1,58 @@
 """New York SOS UCC filing scraper.
 
-The NY UCC system at ucc-efiling.dos.ny.gov provides a public Lien Search
-portal (no login required). It is a server-rendered ASP.NET MVC app.
+Cenuity Online Lien Search at ucc-efiling.dos.ny.gov (public, no login via home link).
 
-This scraper uses Playwright to:
-1. Navigate to the Lien Search page.
-2. For each common debtor-organization name, fill the search form and submit.
-3. Parse the results table (#xhtml_grid) from the returned HTML.
-
-No JSON API is available — results come back as full HTML pages.
-
-**Playwright consolidation:** Not using ``PlaywrightBaseScraper`` — repeated
-form submit + grid parsing per search term; California-style session helper
-does not cover this flow yet.
+Uses :mod:`app.scrapers.playwright_tier1` for MCA search terms, pagination, checkpoints,
+and optional detail enrichment for ``secured_party``.
 """
 
-from playwright.async_api import async_playwright
+from __future__ import annotations
 
-from app.scrapers.base_enriched import PostScrapeScraper
-from app.scrapers.parsers import parse_date
 from app.logging import get_logger
+from app.scrapers.parsers import parse_date
+from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
+from app.scrapers.playwright_tier1.checkpoints import get_page_checkpoint, save_page_checkpoint
+from app.scrapers.playwright_tier1.detail_fetch import fetch_secured_party_from_detail
+from app.scrapers.playwright_tier1.pagination import xhtml_grid_next_page
+from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 
 logger = get_logger("ny_scraper")
 
-# Common debtor organization names for broad coverage of recent filings.
-_SEARCH_TERMS = [
-    "WELLS FARGO",
-    "JPMORGAN",
-    "BANK OF AMERICA",
-    "US BANK",
-    "CATERPILLAR",
-    "JOHN DEERE",
-    "DE LAGE LANDEN",
-    "CIT BANK",
-    "TOYOTA",
-    "CAPITAL ONE",
-]
-
-# Table column indices for the #xhtml_grid results table:
-# 0: Lien Number, 1: Serial Number, 2: Lien Subtype, 3: Debtor Name,
-# 4: Debtor Address, 5: Debtor Type, 6: Filing Date/Time,
-# 7: Lapse Date/Time, 8: Lien Status
+_GRID = "#xhtml_grid"
 _COL_LIEN_NUMBER = 0
 _COL_DEBTOR_NAME = 3
 _COL_FILING_DATE = 6
-_COL_LIEN_STATUS = 8
+
+_EXTRACT_GRID_JS = """() => {
+    const table = document.querySelector('#xhtml_grid');
+    if (!table) return [];
+    const rows = [];
+    table.querySelectorAll('tbody tr').forEach(tr => {
+        const cells = [];
+        tr.querySelectorAll('td').forEach(td => cells.push(td.textContent.trim()));
+        rows.push(cells);
+    });
+    return rows;
+}"""
+
+_HAS_GRID_JS = "() => !!document.querySelector('#xhtml_grid tbody tr')"
 
 
-class NewYorkScraper(PostScrapeScraper):
-    """Scraper for New York Secretary of State UCC filings.
+class NewYorkScraper(PlaywrightTier1Scraper):
+    """NY UCC lien search — broad MCA terms, pagination, optional detail fetch."""
 
-    Uses Playwright to interact with the Cenuity Online Lien Search portal.
-    Secured party is not on the results grid — enrichment would need detail pages.
-    """
-
-    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
-        super().__init__(rate_limiter=rate_limiter)
-        self.run_consolidation = run_consolidation
+    def __init__(
+        self,
+        rate_limiter=None,
+        *,
+        run_consolidation: bool = True,
+        scrape_settings: PlaywrightScrapeSettings | None = None,
+    ) -> None:
+        super().__init__(
+            rate_limiter=rate_limiter,
+            run_consolidation=run_consolidation,
+            scrape_settings=scrape_settings,
+        )
 
     @property
     def state_code(self) -> str:
@@ -72,59 +68,31 @@ class NewYorkScraper(PostScrapeScraper):
 
     @property
     def column_map(self) -> dict[str, int]:
-        # Not used — we parse the table directly — but required by ABC.
         return {}
 
     def build_search_url(self) -> str:
         return self.base_url
 
     def parse_response(self, html: str) -> list[dict]:
-        # Not used — we parse via Playwright evaluate — but required by ABC.
         return []
 
-    async def _fetch(self) -> str:
-        # Not used directly; scrape() is overridden.
-        return ""
-
-    async def scrape(self) -> int:
-        """Execute a full scrape: navigate portal, search, parse, persist."""
-        run = await self._start_run()
-        try:
-            filings = await self._fetch_filings()
-            return await self._finish_scrape_run(run, filings)
-        except Exception as exc:
-            await self._fail_run(run, exc)
-            raise
-
-    async def _fetch_filings(self) -> list[dict]:
-        """Navigate the Lien Search portal and collect filings."""
+    async def _fetch_filings_playwright(self) -> list[dict]:
         await self.rate_limiter.wait(self.state_code, tier=self.tier)
-
+        terms = await self._load_search_terms()
         seen: set[str] = set()
         all_filings: list[dict] = []
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-            )
-            page = await context.new_page()
+        async with self.playwright_chromium_session(
+            launch_args=["--disable-blink-features=AutomationControlled"],
+        ) as page:
             await page.add_init_script(
                 "Object.defineProperty(navigator, 'webdriver', "
                 "{ get: () => undefined });"
             )
 
-            for term in _SEARCH_TERMS:
+            for term in terms:
                 try:
-                    rows = await self._search_term(page, term)
+                    rows = await self._search_term_paginated(page, term)
                     for row in rows:
                         fn = row.get("filing_number", "")
                         if fn and fn not in seen:
@@ -137,60 +105,85 @@ class NewYorkScraper(PostScrapeScraper):
                         unique_so_far=len(all_filings),
                     )
                 except Exception as exc:
-                    logger.warning(
-                        "search_term_failed", term=term, error=str(exc)
-                    )
-
-            await browser.close()
+                    logger.warning("search_term_failed", term=term, error=str(exc))
 
         self.rate_limiter.record_success(self.state_code)
-        logger.info(
-            "ny_fetch_complete",
-            total_filings=len(all_filings),
-        )
+        logger.info("ny_fetch_complete", total_filings=len(all_filings))
         return all_filings
 
-    async def _search_term(self, page, term: str) -> list[dict]:
-        """Navigate to Lien Search, fill the form, submit, and parse results."""
-        # Navigate to homepage then click Lien Search link (direct URL
-        # redirects to login page).
-        await page.goto(
-            self.base_url,
-            wait_until="networkidle",
-            timeout=60_000,
-        )
+    async def _search_term_paginated(self, page, term: str) -> list[dict]:
+        """Search one org term; paginate; optional detail enrichment."""
+        await self._submit_lien_search(page, term)
+        if not await page.evaluate(_HAS_GRID_JS):
+            return []
+
+        completed_pages = await get_page_checkpoint(self.state_code, term)
+        max_pages = self._effective_max_pages()
+        all_rows: list[dict] = []
+
+        for _ in range(completed_pages):
+            if not await xhtml_grid_next_page(page):
+                break
+
+        page_index = completed_pages
+        while page_index < max_pages:
+            page_index += 1
+
+            grid_rows = await page.evaluate(_EXTRACT_GRID_JS)
+            for row_idx, cells in enumerate(grid_rows):
+                filing = self._row_to_filing(cells)
+                if not filing:
+                    continue
+                if (
+                    self.scrape_settings.fetch_detail
+                    and not filing.get("secured_party")
+                ):
+                    enriched = await self._enrich_row_detail(page, row_idx)
+                    if enriched.get("secured_party"):
+                        filing["secured_party"] = enriched["secured_party"]
+                    if enriched.get("filing_date") and not filing.get("filing_date"):
+                        filing["filing_date"] = enriched["filing_date"]
+                all_rows.append(filing)
+
+            await save_page_checkpoint(self.state_code, term, page_index)
+
+            if page_index >= max_pages:
+                break
+            if not await xhtml_grid_next_page(page):
+                break
+            if not await page.evaluate(_HAS_GRID_JS):
+                break
+
+        return all_rows
+
+    async def _enrich_row_detail(self, page, row_index: int) -> dict:
+        """Open lien detail for one grid row (0-based data row index)."""
+        selector = f"#xhtml_grid tbody tr:nth-child({row_index + 1}) td:first-child a"
+        return await fetch_secured_party_from_detail(page, lien_selector=selector)
+
+    async def _submit_lien_search(self, page, term: str) -> None:
+        await page.goto(self.base_url, wait_until="networkidle", timeout=60_000)
         await page.click('a:has-text("Lien Search")')
         await page.wait_for_load_state("networkidle", timeout=30_000)
 
-        # Set up the form: Debtor Name > Organization > Starts With
-        # Use page.evaluate to set form state and submit in one go to avoid
-        # race conditions with navigation.
         await page.evaluate(
             """(term) => {
-                // Select Debtor Name radio
                 document.getElementById('rdbDebtor').checked = true;
-                uccSearchVM.RadioButtonClick('DebtorName');
-
-                // Select Organization radio
+                if (typeof uccSearchVM !== 'undefined') {
+                    uccSearchVM.RadioButtonClick('DebtorName');
+                }
                 document.getElementById('rdbOrg').checked = true;
-                DebtorTypeClick('Organization');
-
-                // Set search logic to "Starts with"
+                if (typeof DebtorTypeClick === 'function') {
+                    DebtorTypeClick('Organization');
+                }
                 document.getElementById('ddlSearchLogic').value = 'SW';
-
-                // Fill organization name
-                document.getElementById(
-                    'UCCSearch_UCCSerach_txtOrgName'
-                ).value = term;
+                document.getElementById('UCCSearch_UCCSerach_txtOrgName').value = term;
             }""",
             term,
         )
         await page.wait_for_timeout(300)
 
-        # Submit the form and wait for navigation to complete
-        async with page.expect_navigation(
-            wait_until="networkidle", timeout=45_000
-        ):
+        async with page.expect_navigation(wait_until="networkidle", timeout=45_000):
             await page.evaluate(
                 """() => {
                     uccSearchVM.SearchButtonClick(
@@ -199,53 +192,17 @@ class NewYorkScraper(PostScrapeScraper):
                 }"""
             )
 
-        # Check if the results table appeared
-        has_table = await page.evaluate(
-            "() => !!document.querySelector('#xhtml_grid tbody tr')"
-        )
-        if not has_table:
-            return []
-
-        # Extract all rows from the results table
-        rows_data = await page.evaluate(
-            """() => {
-                const table = document.querySelector('#xhtml_grid');
-                const rows = [];
-                table.querySelectorAll('tbody tr').forEach(tr => {
-                    const cells = [];
-                    tr.querySelectorAll('td').forEach(
-                        td => cells.push(td.textContent.trim())
-                    );
-                    rows.push(cells);
-                });
-                return rows;
-            }"""
-        )
-
-        filings = []
-        for cells in rows_data:
-            filing = self._row_to_filing(cells)
-            if filing:
-                filings.append(filing)
-        return filings
-
     def _row_to_filing(self, cells: list[str]) -> dict | None:
-        """Convert a table row into a UCCFiling-compatible dict."""
         if len(cells) <= _COL_FILING_DATE:
             return None
-
         lien_number = cells[_COL_LIEN_NUMBER].strip()
         if not lien_number or not any(c.isdigit() for c in lien_number):
             return None
-
         debtor = cells[_COL_DEBTOR_NAME].strip() or "Unknown"
-
-        # Filing date comes as "M/D/YYYY H:MM:SS AM/PM" — extract date part
         date_str = cells[_COL_FILING_DATE].strip()
         if " " in date_str:
             date_str = date_str.split(" ")[0]
         filing_date = parse_date(date_str) if date_str else None
-
         return {
             "filing_number": lien_number,
             "state": self.state_code,

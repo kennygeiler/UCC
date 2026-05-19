@@ -19,10 +19,10 @@ UpdatePanel + SOS tracker merge need bespoke async steps beyond single-URL fetch
 import re
 
 import httpx
-from playwright.async_api import async_playwright
 
-from app.scrapers.base_enriched import PostScrapeScraper
 from app.scrapers.parsers import parse_date
+from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
+from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 from app.logging import get_logger
 
 logger = get_logger("tx_scraper")
@@ -32,27 +32,13 @@ _SOS_TRACKER_URL = (
     "https://webservices.sos.state.tx.us/ucc_filing_tracker/status.aspx"
 )
 
-# Common debtor/secured-party names that appear frequently in UCC filings.
-_SEARCH_TERMS = [
-    "WELLS FARGO",
-    "JPMORGAN",
-    "BANK OF AMERICA",
-    "US BANK",
-    "CATERPILLAR",
-    "JOHN DEERE",
-    "DE LAGE LANDEN",
-    "CIT BANK",
-    "TOYOTA",
-    "CAPITAL ONE",
-]
-
 # Regex patterns for ASP.NET hidden fields (used for SOS tracker fallback).
 _VS_RE = re.compile(r'id="__VIEWSTATE"\s+value="([^"]*)"')
 _VSG_RE = re.compile(r'id="__VIEWSTATEGENERATOR"\s+value="([^"]*)"')
 _EV_RE = re.compile(r'id="__EVENTVALIDATION"\s+value="([^"]*)"')
 
 
-class TexasScraper(PostScrapeScraper):
+class TexasScraper(PlaywrightTier1Scraper):
     """Scraper for Texas UCC filings.
 
     Primary source: Harris County Clerk (Playwright).
@@ -60,9 +46,18 @@ class TexasScraper(PostScrapeScraper):
     Post-scrape consolidation pipeline runs after persist.
     """
 
-    def __init__(self, rate_limiter=None, *, run_consolidation: bool = True) -> None:
-        super().__init__(rate_limiter=rate_limiter)
-        self.run_consolidation = run_consolidation
+    def __init__(
+        self,
+        rate_limiter=None,
+        *,
+        run_consolidation: bool = True,
+        scrape_settings: PlaywrightScrapeSettings | None = None,
+    ) -> None:
+        super().__init__(
+            rate_limiter=rate_limiter,
+            run_consolidation=run_consolidation,
+            scrape_settings=scrape_settings,
+        )
 
     @property
     def state_code(self) -> str:
@@ -86,37 +81,24 @@ class TexasScraper(PostScrapeScraper):
     def parse_response(self, html: str) -> list[dict]:
         return []
 
-    async def scrape(self) -> int:
-        """Execute a full scrape: query Harris County, optionally SOS tracker."""
-        run = await self._start_run()
+    async def _fetch_filings_playwright(self) -> list[dict]:
+        filings = await self._fetch_harris_county()
         try:
-            filings = await self._fetch_harris_county()
-
-            # Try SOS tracker as supplementary source (non-fatal if down).
-            try:
-                sos_filings = await self._fetch_sos_tracker()
-                if sos_filings:
-                    seen = {f["filing_number"] for f in filings}
-                    for f in sos_filings:
-                        if f["filing_number"] not in seen:
-                            filings.append(f)
-                            seen.add(f["filing_number"])
-                    logger.info(
-                        "sos_tracker_merged",
-                        sos_count=len(sos_filings),
-                        total=len(filings),
-                    )
-            except Exception as exc:
-                logger.info("sos_tracker_unavailable", error=str(exc)[:200])
-
-            return await self._finish_scrape_run(run, filings)
+            sos_filings = await self._fetch_sos_tracker()
+            if sos_filings:
+                seen = {f["filing_number"] for f in filings}
+                for f in sos_filings:
+                    if f["filing_number"] not in seen:
+                        filings.append(f)
+                        seen.add(f["filing_number"])
+                logger.info(
+                    "sos_tracker_merged",
+                    sos_count=len(sos_filings),
+                    total=len(filings),
+                )
         except Exception as exc:
-            await self._fail_run(run, exc)
-            raise
-
-    # ------------------------------------------------------------------
-    # Harris County Clerk UCC Search (primary)
-    # ------------------------------------------------------------------
+            logger.info("sos_tracker_unavailable", error=str(exc)[:200])
+        return filings
 
     async def _fetch_harris_county(self) -> list[dict]:
         """Search Harris County Clerk UCC database via Playwright."""
@@ -125,28 +107,17 @@ class TexasScraper(PostScrapeScraper):
         seen: set[str] = set()
         all_filings: list[dict] = []
 
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--disable-blink-features=AutomationControlled"],
-            )
-            context = await browser.new_context(
-                user_agent=(
-                    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-                    "AppleWebKit/537.36 (KHTML, like Gecko) "
-                    "Chrome/131.0.0.0 Safari/537.36"
-                ),
-                viewport={"width": 1920, "height": 1080},
-            )
-            page = await context.new_page()
+        terms = await self._load_search_terms()
+        max_rows_cap = self._effective_max_pages() * 10
 
-            await page.goto(
-                _HC_URL, wait_until="networkidle", timeout=30_000
-            )
+        async with self.playwright_chromium_session(
+            launch_args=["--disable-blink-features=AutomationControlled"],
+        ) as page:
+            await page.goto(_HC_URL, wait_until="networkidle", timeout=30_000)
 
-            for term in _SEARCH_TERMS:
+            for term in terms:
                 try:
-                    filings = await self._hc_search(page, term)
+                    filings = await self._hc_search(page, term, max_rows_cap)
                     for f in filings:
                         fn = f.get("filing_number", "")
                         if fn and fn not in seen:
@@ -163,13 +134,11 @@ class TexasScraper(PostScrapeScraper):
                         "hc_search_failed", term=term, error=str(exc)[:200]
                     )
 
-            await browser.close()
-
         self.rate_limiter.record_success(self.state_code)
         logger.info("hc_fetch_complete", total_filings=len(all_filings))
         return all_filings
 
-    async def _hc_search(self, page, term: str) -> list[dict]:
+    async def _hc_search(self, page, term: str, max_rows_cap: int) -> list[dict]:
         """Execute a single debtor-name search on Harris County."""
         # Reload the page to get a clean form (AJAX UpdatePanels break
         # input locators after a search completes).
@@ -194,7 +163,8 @@ class TexasScraper(PostScrapeScraper):
         total = int(match.group(1))
         logger.info("hc_results", term=term, total=total)
 
-        return await self._hc_extract_rows(page, min(total, 50))
+        cap = min(total, max(10, max_rows_cap))
+        return await self._hc_extract_rows(page, cap)
 
     async def _hc_extract_rows(self, page, max_rows: int) -> list[dict]:
         """Extract filing rows from the Harris County ListView."""
@@ -267,7 +237,8 @@ class TexasScraper(PostScrapeScraper):
             init_resp.raise_for_status()
             tokens = _extract_tokens(init_resp.text)
 
-            for term in _SEARCH_TERMS[:5]:  # Fewer terms for supplementary
+            terms = (await self._load_search_terms())[:5]
+            for term in terms:
                 try:
                     rows = await self._sos_search(client, term, tokens)
                     for f in rows:
