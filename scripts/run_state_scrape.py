@@ -46,7 +46,7 @@ def _parse_args() -> argparse.Namespace:
     parser.add_argument(
         "--profile",
         default=None,
-        help="Run only this search profile (NY: secured_party_org_sw, debtor_org_sw, etc.).",
+        help="Run only this search profile (NY: debtor_org_sw, debtor_org_bw).",
     )
     return parser.parse_args()
 

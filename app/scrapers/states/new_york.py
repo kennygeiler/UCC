@@ -39,13 +39,7 @@ from app.scrapers.playwright_tier1.prefix_queue import (
 )
 from app.scrapers.playwright_tier1.profiles import (
     NY_SEARCH_PROFILES,
-    PartySearchMode,
     SearchProfileSpec,
-    TermSource,
-)
-from app.scrapers.playwright_tier1.search_terms import (
-    build_search_term_list,
-    build_secured_party_variant_terms,
 )
 from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 
@@ -78,17 +72,9 @@ _EXTRACT_GRID_JS = """() => {
 _HAS_GRID_JS = "() => !!document.querySelector('#xhtml_grid tbody tr')"
 
 _SUBMIT_SEARCH_JS = """(args) => {
-    const { partyMode, searchLogic, term } = args;
-    const secured = partyMode === 'secured';
+    const { searchLogic, term } = args;
     const debtorRadio = document.getElementById('rdbDebtor');
-    const securedRadio = document.getElementById('rdbSecuredParty')
-        || document.getElementById('rdbSecured');
-    if (secured && securedRadio) {
-        securedRadio.checked = true;
-        if (typeof uccSearchVM !== 'undefined') {
-            uccSearchVM.RadioButtonClick('SecuredPartyName');
-        }
-    } else if (debtorRadio) {
+    if (debtorRadio) {
         debtorRadio.checked = true;
         if (typeof uccSearchVM !== 'undefined') {
             uccSearchVM.RadioButtonClick('DebtorName');
@@ -154,13 +140,6 @@ class NewYorkScraper(PlaywrightTier1Scraper):
 
     async def _load_terms_for_profile(self, profile: SearchProfileSpec) -> list[str]:
         s = self.scrape_settings
-        if profile.term_source == TermSource.MCA_ALIASES:
-            # Funder limit applies before variant expansion (first token + each alias).
-            return await build_secured_party_variant_terms(
-                funder_limit=s.mca_term_limit,
-                variant_limit_per_funder=s.variant_limit_per_funder,
-                extra_terms=s.extra_search_terms,
-            )
         offset = await get_prefix_offset(self.state_code, profile.name)
         batch, next_offset = slice_prefix_terms(
             s.prefix_terms,
@@ -475,18 +454,9 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         await page.click('a:has-text("Lien Search")')
         await page.wait_for_load_state("networkidle", timeout=30_000)
 
-        party_mode = (
-            "secured"
-            if profile.party_mode == PartySearchMode.SECURED
-            else "debtor"
-        )
         await page.evaluate(
             _SUBMIT_SEARCH_JS,
-            {
-                "partyMode": party_mode,
-                "searchLogic": profile.search_logic,
-                "term": term,
-            },
+            {"searchLogic": profile.search_logic, "term": term},
         )
         await page.wait_for_timeout(300)
 
@@ -533,8 +503,6 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         filing_date = parse_date(date_str) if date_str else None
 
         secured_party: str | None = None
-        if profile.party_mode == PartySearchMode.SECURED:
-            secured_party = search_term.strip().upper() or None
         if secured_party_col is not None and secured_party_col < len(cells):
             grid_sp = cells[secured_party_col].strip()
             if grid_sp:

@@ -45,7 +45,7 @@ TIER1_OPERATOR_NOTES: dict[str, str] = {
     "FL": "REST API deep pagination, secured-party enrichment, checkpoints.",
     "CA": "Playwright + bizfile JSON API; MCA terms; secured_party on API rows; env caps.",
     "TX": "Playwright Harris County + SOS tracker; MCA terms; env row caps.",
-    "NY": "Multi-profile lien search (secured-party MCA + debtor prefix queue); pagination; detail fetch.",
+    "NY": "Debtor-name lien search (prefix queue); pagination; secured party from detail fetch.",
     "NJ": "Playwright non-certified search; MCA terms; pagination; env caps.",
     "GA": "HTML stub URL not live — needs GA eCorp UCC portal research.",
     "IL": "HTML stub URL not live — needs IL SOS UCC portal research.",
@@ -117,7 +117,7 @@ def tier1_dashboard_row(state_code: str) -> dict:
                 f"{row['notes']} Profiles: {row['search_profiles']}."
             )
         except Exception:
-            row["search_profiles"] = "secured_party_org_sw, debtor_org_sw"
+            row["search_profiles"] = "debtor_org_sw"
     return row
 
 

@@ -31,19 +31,10 @@ class SearchProfileSpec:
 
 
 # NY Cenuity lien search profiles (see new_york.py portal recon comments).
+# The NY public portal only supports Filing-Number and Debtor-Name search —
+# there is no secured-party search. Profiles are therefore debtor-only; the
+# secured party is read from each lien's detail page.
 NY_SEARCH_PROFILES: dict[str, SearchProfileSpec] = {
-    "secured_party_org_sw": SearchProfileSpec(
-        name="secured_party_org_sw",
-        party_mode=PartySearchMode.SECURED,
-        search_logic="SW",
-        term_source=TermSource.MCA_ALIASES,
-    ),
-    "secured_party_org_bw": SearchProfileSpec(
-        name="secured_party_org_bw",
-        party_mode=PartySearchMode.SECURED,
-        search_logic="BW",
-        term_source=TermSource.MCA_ALIASES,
-    ),
     "debtor_org_sw": SearchProfileSpec(
         name="debtor_org_sw",
         party_mode=PartySearchMode.DEBTOR,
@@ -58,10 +49,7 @@ NY_SEARCH_PROFILES: dict[str, SearchProfileSpec] = {
     ),
 }
 
-DEFAULT_NY_SEARCH_PROFILES: tuple[str, ...] = (
-    "secured_party_org_sw",
-    "debtor_org_sw",
-)
+DEFAULT_NY_SEARCH_PROFILES: tuple[str, ...] = ("debtor_org_sw",)
 
 # Legacy single-profile key for NJ/CA/TX until they enable *_SCRAPE_SEARCH_PROFILES.
 DEFAULT_LEGACY_PROFILE = "search"

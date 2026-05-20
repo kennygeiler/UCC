@@ -12,7 +12,6 @@ from app.scrapers.playwright_tier1.detail_fetch import parse_detail_fields_from_
 from app.scrapers.playwright_tier1.prefix_queue import slice_prefix_terms
 from app.scrapers.playwright_tier1.profiles import (
     NY_SEARCH_PROFILES,
-    PartySearchMode,
     parse_profile_list,
 )
 from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings, load_playwright_scrape_settings
@@ -20,8 +19,8 @@ from app.scrapers.states.new_york import NewYorkScraper
 
 
 def test_search_profile_key_includes_profile_and_term():
-    assert search_profile_key("secured_party_org_sw", "  ondeck  ") == (
-        "secured_party_org_sw|ONDECK"
+    assert search_profile_key("debtor_org_sw", "  ondeck  ") == (
+        "debtor_org_sw|ONDECK"
     )
 
 
@@ -47,29 +46,6 @@ def test_ny_row_to_filing_parses_grid_cells():
     assert filing["debtor_name"] == "ACME LLC"
     assert filing["state"] == "NY"
     assert filing["filing_date"] is not None
-
-
-def test_ny_secured_party_profile_sets_sp_from_term():
-    scraper = NewYorkScraper()
-    profile = NY_SEARCH_PROFILES["secured_party_org_sw"]
-    cells = [
-        "2024000123",
-        "1",
-        "UC",
-        "ACME LLC",
-        "123 Main",
-        "Org",
-        "3/15/2024",
-        "",
-        "Active",
-    ]
-    filing = scraper._row_to_filing(
-        cells,
-        profile=profile,
-        search_term="yellowstone",
-        secured_party_col=None,
-    )
-    assert filing["secured_party"] == "YELLOWSTONE"
 
 
 def test_ny_row_parses_secured_party_column_from_grid():
@@ -111,81 +87,22 @@ def test_ny_row_to_filing_rejects_header_like_rows():
 
 def test_parse_ny_profiles_from_env_string():
     parsed = parse_profile_list(
-        "secured_party_org_sw, debtor_org_sw, unknown",
+        "debtor_org_sw, debtor_org_bw, unknown",
         valid=NY_SEARCH_PROFILES,
     )
-    assert parsed == ("secured_party_org_sw", "debtor_org_sw")
-
-
-def test_first_significant_token_strips_suffixes():
-    from app.scrapers.playwright_tier1.search_terms import first_significant_token
-
-    assert first_significant_token("Yellowstone Capital LLC") == "YELLOWSTONE"
-    assert first_significant_token("ONDECK CAPITAL LLC") == "ONDECK"
-    assert first_significant_token("LLC") is None
-
-
-def test_expand_secured_party_variants_dedupes():
-    from app.scrapers.playwright_tier1.search_terms import expand_secured_party_search_terms
-
-    terms = expand_secured_party_search_terms(
-        ["Yellowstone Capital LLC", "YELLOWSTONE CAPITAL LLC"],
-        variant_limit=None,
-    )
-    assert terms == ["YELLOWSTONE CAPITAL LLC", "YELLOWSTONE"]
-
-
-def test_expand_secured_party_variants_multiple_aliases():
-    from app.scrapers.playwright_tier1.search_terms import expand_secured_party_search_terms
-
-    terms = expand_secured_party_search_terms(
-        ["Pearl Capital", "Pearl Cash", "Horizon Business Funding"],
-    )
-    assert "PEARL CAPITAL" in terms
-    assert "PEARL" in terms
-    assert "PEARL CASH" in terms
-    assert "HORIZON BUSINESS FUNDING" in terms
-    assert "HORIZON" in terms
-
-
-@pytest.mark.asyncio
-async def test_build_secured_party_variant_terms(monkeypatch):
-    from app.scrapers.playwright_tier1 import search_terms as st
-
-    monkeypatch.setattr(
-        st,
-        "load_mca_funder_alias_groups",
-        AsyncMock(
-            return_value=[
-                ["YELLOWSTONE CAPITAL LLC"],
-                ["ONDECK CAPITAL", "ON DECK CAPITAL LLC"],
-            ]
-        ),
-    )
-    monkeypatch.setattr(st, "count_mca_funder_aliases", AsyncMock(return_value=100))
-    terms = await st.build_secured_party_variant_terms(
-        funder_limit=2,
-        variant_limit_per_funder=None,
-        extra_terms=("CUSTOM",),
-    )
-    assert "YELLOWSTONE CAPITAL LLC" in terms
-    assert "YELLOWSTONE" in terms
-    assert "ONDECK CAPITAL" in terms
-    assert "ONDECK" in terms
-    assert "ON DECK CAPITAL LLC" in terms
-    assert "CUSTOM" in terms
+    assert parsed == ("debtor_org_sw", "debtor_org_bw")
 
 
 def test_search_profile_key_bw_profile():
-    assert search_profile_key("secured_party_org_bw", "YELLOWSTONE") == (
-        "secured_party_org_bw|YELLOWSTONE"
+    assert search_profile_key("debtor_org_bw", "YELLOWSTONE") == (
+        "debtor_org_bw|YELLOWSTONE"
     )
 
 
-def test_ny_secured_party_bw_profile_exists():
-    bw = NY_SEARCH_PROFILES["secured_party_org_bw"]
+def test_ny_debtor_bw_profile_exists():
+    bw = NY_SEARCH_PROFILES["debtor_org_bw"]
     assert bw.search_logic == "BW"
-    assert bw.party_mode == PartySearchMode.SECURED
+    assert bw.party_mode.value == "debtor"
 
 
 def test_prefix_queue_slice_rotates():
@@ -236,13 +153,11 @@ def test_load_playwright_scrape_settings_from_env(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://u:p@localhost/db")
     monkeypatch.setenv("NY_SCRAPE_MAX_PAGES", "7")
     monkeypatch.setenv("NY_SCRAPE_MAX_TERMS", "4")
-    monkeypatch.setenv(
-        "NY_SCRAPE_SEARCH_PROFILES", "secured_party_org_sw,debtor_org_sw"
-    )
+    monkeypatch.setenv("NY_SCRAPE_SEARCH_PROFILES", "debtor_org_sw")
     settings = load_playwright_scrape_settings("NY")
     assert settings.max_pages == 7
     assert settings.max_terms == 4
-    assert settings.search_profiles == ("secured_party_org_sw", "debtor_org_sw")
+    assert settings.search_profiles == ("debtor_org_sw",)
     assert settings.mca_term_limit == 200
 
 
@@ -290,7 +205,7 @@ async def test_playwright_tier1_effective_max_pages_page_cap():
             mca_term_limit=10,
             extra_search_terms=(),
             page_cap_per_run=3,
-            search_profiles=("secured_party_org_sw",),
+            search_profiles=("debtor_org_sw",),
         )
     )
     assert scraper._effective_max_pages() == 3
