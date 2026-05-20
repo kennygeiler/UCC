@@ -49,6 +49,7 @@ from app.scrapers.states.tier4_stubs import (
     DistrictColumbiaStubScraper,
     NewYorkCityStubScraper,
 )
+from app.scrapers.tier1_not_ready import Tier1NotReadyScraper
 
 # Explicit mapping — no dynamic imports (P-019)
 SCRAPER_REGISTRY: dict[str, dict] = {
@@ -105,11 +106,17 @@ _MAX_SCHEDULABLE_TIER = 3
 
 
 def schedulable_state_codes() -> list[str]:
-    """State codes that receive interval scrape jobs (excludes Tier 4 stubs)."""
+    """State codes that receive interval scrape jobs.
+
+    Excludes Tier 4 stubs and Tier 1 placeholders with no live portal yet
+    (``Tier1NotReadyScraper`` — GA, IL, OH, MD, PA). Scheduling those would
+    only record a failed run every cycle.
+    """
     return [
         code
         for code, info in SCRAPER_REGISTRY.items()
         if info["tier"] <= _MAX_SCHEDULABLE_TIER
+        and not issubclass(info["class"], Tier1NotReadyScraper)
     ]
 
 

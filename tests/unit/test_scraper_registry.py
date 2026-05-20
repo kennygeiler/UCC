@@ -17,6 +17,8 @@ EXPECTED_TIER1 = ["CA", "TX", "FL", "NY", "NJ", "GA", "IL", "PA", "OH", "MD"]
 
 EXPECTED_TIER3 = ["NH", "RI", "DE", "HI", "NV", "UT"]
 EXPECTED_TIER4 = ["DC", "NYC"]
+# Tier 1 placeholders with no live portal — registered but not scheduled.
+EXPECTED_NOT_READY = ["GA", "IL", "OH", "MD", "PA"]
 
 
 def test_registry_has_all_tier1_states():
@@ -38,10 +40,13 @@ def test_tier_counts():
     assert len(get_states_by_tier(4)) == 2
 
 
-def test_schedulable_excludes_tier4():
-    """Tier 4 stubs are not in the APScheduler job list."""
-    assert set(schedulable_state_codes()) & set(EXPECTED_TIER4) == set()
-    assert len(schedulable_state_codes()) == 40
+def test_schedulable_excludes_tier4_and_not_ready():
+    """Tier 4 stubs and not-ready Tier 1 placeholders get no APScheduler job."""
+    schedulable = set(schedulable_state_codes())
+    assert schedulable & set(EXPECTED_TIER4) == set()
+    assert schedulable & set(EXPECTED_NOT_READY) == set()
+    # 40 production scrapers minus 5 not-ready Tier 1 placeholders.
+    assert len(schedulable_state_codes()) == 35
 
 
 def test_all_classes_are_base_scraper_subclasses():
