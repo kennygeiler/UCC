@@ -54,7 +54,6 @@ logger = get_logger("ny_scraper")
 _GRID = "#xhtml_grid"
 _COL_LIEN_NUMBER = 0
 _COL_DEBTOR_NAME = 3
-_COL_SECURED_PARTY = 7
 _COL_FILING_DATE = 6
 
 _EXTRACT_GRID_JS = """() => {
@@ -493,11 +492,17 @@ class NewYorkScraper(PlaywrightTier1Scraper):
             )
 
     def _secured_party_column(self, headers: list[str]) -> int | None:
+        """Grid column index for secured party, or None when absent.
+
+        The NY results grid has no secured-party column — secured party comes
+        from the lien detail page (debtor profiles) or the search term itself
+        (secured-party profiles). Only return an index when a header explicitly
+        names it; never guess a column, or a date/status cell gets mis-stored
+        as the secured party and the filing fails MCA classification.
+        """
         for idx, label in enumerate(headers):
             if "secured" in label and "party" in label:
                 return idx
-        if _COL_SECURED_PARTY < 20:
-            return _COL_SECURED_PARTY
         return None
 
     def _row_to_filing(
