@@ -1,5 +1,6 @@
 [build]
-builder = "NIXPACKS"
+# Dockerfile build bakes in Playwright Chromium for the Tier 1 browser scrapers.
+builder = "DOCKERFILE"
 
 # ---------------------------------------------------------------------------
 # Pipeline service (default / web) — FastAPI dashboard + webhook receiver
