@@ -19,6 +19,8 @@ pagination, checkpoints, and optional detail enrichment.
 
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
+
 from app.logging import get_logger
 from app.scrapers.parsers import parse_date
 from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
@@ -72,7 +74,7 @@ _EXTRACT_GRID_JS = """() => {
 _HAS_GRID_JS = "() => !!document.querySelector('#xhtml_grid tbody tr')"
 
 _SUBMIT_SEARCH_JS = """(args) => {
-    const { searchLogic, term } = args;
+    const { searchLogic, term, filingDateFrom } = args;
     const debtorRadio = document.getElementById('rdbDebtor');
     if (debtorRadio) {
         debtorRadio.checked = true;
@@ -89,6 +91,16 @@ _SUBMIT_SEARCH_JS = """(args) => {
     if (logic) logic.value = searchLogic;
     const nameInput = document.getElementById('UCCSearch_UCCSerach_txtOrgName');
     if (nameInput) nameInput.value = term;
+    // Scope to active UCC liens — skip lapsed/released liens and federal tax liens.
+    const status = document.getElementById('ddlLienStatus');
+    if (status) status.value = '1';
+    const lienType = document.getElementById('ddlLienType');
+    if (lienType) lienType.value = '1';
+    // Optional filing-date lower bound (MM/DD/YYYY) to scope to recent filings.
+    if (filingDateFrom) {
+        const df = document.getElementById('UCCSearch_UCCSerach_txtFilingDateFrom');
+        if (df) df.value = filingDateFrom;
+    }
 }"""
 
 
@@ -447,6 +459,19 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         selector = f"#xhtml_grid tbody tr:nth-child({row_index + 1}) td:first-child a"
         return await fetch_secured_party_from_detail(page, lien_selector=selector)
 
+    def _filing_date_from(self) -> str | None:
+        """Filing-date lower bound (MM/DD/YYYY) from NY_SCRAPE_FILING_LOOKBACK_DAYS.
+
+        Returns None when the lookback is 0 (full-history crawl).
+        """
+        from app.config import Settings
+
+        days = Settings().NY_SCRAPE_FILING_LOOKBACK_DAYS
+        if days <= 0:
+            return None
+        cutoff = datetime.now(timezone.utc).date() - timedelta(days=days)
+        return cutoff.strftime("%m/%d/%Y")
+
     async def _submit_lien_search(
         self, page, profile: SearchProfileSpec, term: str
     ) -> None:
@@ -456,7 +481,11 @@ class NewYorkScraper(PlaywrightTier1Scraper):
 
         await page.evaluate(
             _SUBMIT_SEARCH_JS,
-            {"searchLogic": profile.search_logic, "term": term},
+            {
+                "searchLogic": profile.search_logic,
+                "term": term,
+                "filingDateFrom": self._filing_date_from(),
+            },
         )
         await page.wait_for_timeout(300)
 

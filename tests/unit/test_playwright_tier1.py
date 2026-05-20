@@ -85,6 +85,23 @@ def test_ny_row_to_filing_rejects_header_like_rows():
     )
 
 
+def test_ny_filing_date_from_window(monkeypatch):
+    from datetime import datetime, timedelta, timezone
+
+    monkeypatch.setenv("NY_SCRAPE_FILING_LOOKBACK_DAYS", "30")
+    scraper = NewYorkScraper()
+    expected = (
+        datetime.now(timezone.utc).date() - timedelta(days=30)
+    ).strftime("%m/%d/%Y")
+    assert scraper._filing_date_from() == expected
+
+
+def test_ny_filing_date_from_disabled(monkeypatch):
+    monkeypatch.setenv("NY_SCRAPE_FILING_LOOKBACK_DAYS", "0")
+    scraper = NewYorkScraper()
+    assert scraper._filing_date_from() is None
+
+
 def test_parse_ny_profiles_from_env_string():
     parsed = parse_profile_list(
         "debtor_org_sw, debtor_org_bw, unknown",

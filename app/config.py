@@ -83,6 +83,9 @@ class Settings(BaseSettings):
     # Pagination direction: forward (page 1→N), reverse (last→first), recent_only (last K pages).
     NY_SCRAPE_PAGE_ORDER: str = "forward"
     NY_SCRAPE_RECENT_PAGES: int = 10
+    # Filing-date lower bound for the NY debtor crawl, in days back from today.
+    # Scopes the search to recent active UCC liens; 0 = no date filter (full history).
+    NY_SCRAPE_FILING_LOOKBACK_DAYS: int = 365
 
     NJ_SCRAPE_MAX_PAGES: int = 50
     NJ_SCRAPE_MAX_TERMS: int = 20
