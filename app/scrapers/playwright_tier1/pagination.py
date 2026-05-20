@@ -81,6 +81,55 @@ XHTML_GRID_NEXT_JS = """() => {
     return false;
 }"""
 
+# NY xhtml_grid: click numeric pager link for a specific page (1-based).
+XHTML_GRID_GOTO_PAGE_JS = """(targetPage) => {
+    const target = parseInt(targetPage, 10);
+    if (!target || target < 1) return false;
+    const text = document.body.innerText || '';
+    const match = text.match(/Page\\s+(\\d+)\\s*\\/\\s*(\\d+)/i)
+        || text.match(/(\\d+)\\s+of\\s+(\\d+)/i);
+    if (match && parseInt(match[1], 10) === target) return true;
+    const links = document.querySelectorAll(
+        '#xhtml_grid ~ .pagination a, .datagrid-pager a, .pagination a'
+    );
+    for (const a of links) {
+        if ((a.innerText || '').trim() === String(target)) {
+            a.click();
+            return true;
+        }
+    }
+    return false;
+}"""
+
+# NY xhtml_grid: previous page via numeric link or prev control.
+XHTML_GRID_PREV_JS = """() => {
+    const text = document.body.innerText || '';
+    const match = text.match(/Page\\s+(\\d+)\\s*\\/\\s*(\\d+)/i)
+        || text.match(/(\\d+)\\s+of\\s+(\\d+)/i);
+    if (match) {
+        const current = parseInt(match[1], 10);
+        const prev = current - 1;
+        if (prev >= 1) {
+            const links = document.querySelectorAll(
+                '#xhtml_grid ~ .pagination a, .datagrid-pager a, .pagination a'
+            );
+            for (const a of links) {
+                if ((a.innerText || '').trim() === String(prev)) {
+                    a.click();
+                    return true;
+                }
+            }
+        }
+    }
+    const prevBtn = document.querySelector(
+        '#xhtml_grid ~ .pagination a.prev:not(.disabled), ' +
+        '.datagrid-pager a.l-btn-icon-prev:not(.l-btn-disabled), ' +
+        'a[title="Previous"]:not(.disabled)'
+    );
+    if (prevBtn) { prevBtn.click(); return true; }
+    return false;
+}"""
+
 
 async def read_pager_info(page, grid_selector: str) -> tuple[int, int]:
     """Return (current_page, total_pages); zeros if unknown."""
@@ -125,6 +174,38 @@ async def aspnet_grid_next_page(page, grid_selector: str) -> bool:
 async def xhtml_grid_next_page(page) -> bool:
     """Advance NY-style xhtml_grid pager."""
     clicked = await page.evaluate(XHTML_GRID_NEXT_JS)
+    if not clicked:
+        return False
+    await page.wait_for_load_state("networkidle", timeout=45_000)
+    await page.wait_for_timeout(500)
+    return True
+
+
+async def xhtml_grid_goto_page(page, target_page: int) -> bool:
+    """Navigate NY-style xhtml_grid to ``target_page`` (1-based)."""
+    if target_page < 1:
+        return False
+    clicked = await page.evaluate(XHTML_GRID_GOTO_PAGE_JS, target_page)
+    if not clicked:
+        return False
+    await page.wait_for_load_state("networkidle", timeout=45_000)
+    await page.wait_for_timeout(500)
+    return True
+
+
+async def xhtml_grid_goto_last_page(page, grid_selector: str = "#xhtml_grid") -> int:
+    """Jump to last pager page; return total pages (0 if unknown)."""
+    _current, total = await read_pager_info(page, grid_selector)
+    if total <= 1:
+        return max(total, 1 if _current else 0)
+    if _current != total:
+        await xhtml_grid_goto_page(page, total)
+    return total
+
+
+async def xhtml_grid_prev_page(page) -> bool:
+    """Move to previous NY-style xhtml_grid page."""
+    clicked = await page.evaluate(XHTML_GRID_PREV_JS)
     if not clicked:
         return False
     await page.wait_for_load_state("networkidle", timeout=45_000)

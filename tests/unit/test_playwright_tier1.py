@@ -278,7 +278,7 @@ async def test_ny_pagination_mock_two_pages():
 
     page = MagicMock()
 
-    async def _evaluate(js: str):
+    async def _evaluate(js: str, *_args):
         if "tbody tr" in js and "headers" not in js:
             return True
         page_calls["eval"] += 1
@@ -291,6 +291,9 @@ async def test_ny_pagination_mock_two_pages():
         return page_calls["n"] < 2
 
     with patch(
+        "app.scrapers.states.new_york.read_pager_info",
+        AsyncMock(return_value=(1, 2)),
+    ), patch(
         "app.scrapers.states.new_york.get_page_checkpoint",
         AsyncMock(return_value=0),
     ), patch(

@@ -34,9 +34,21 @@ NY_SCRAPE_MAX_TERMS=20                # debtor prefix batch size only
 NY_SCRAPE_MAX_PAGES=50
 NY_SCRAPE_FETCH_DETAIL=true
 # NY_SCRAPE_PAGE_CAP_PER_RUN=500      # optional daily page budget
+# NY_SCRAPE_PAGE_ORDER=forward        # forward | reverse | recent_only
+# NY_SCRAPE_RECENT_PAGES=10           # last K pages when recent_only
 ```
 
 **Profile order:** `secured_party_org_sw` runs first (MCA aliases from DB), then `debtor_org_sw` (prefix queue).
+
+**Pagination order:** `NY_SCRAPE_PAGE_ORDER` controls grid direction per term:
+
+| Value | Behavior |
+|-------|----------|
+| `forward` | Page 1 → N (default; checkpoint = last forward page) |
+| `reverse` | Last page → first until `NY_SCRAPE_MAX_PAGES` budget |
+| `recent_only` | Last `NY_SCRAPE_RECENT_PAGES` pages only (default 10) |
+
+Reverse/recent checkpoints store **pages scraped from the end** (resume jumps to `last - completed`).
 
 ## 3. Run secured-party full scrape
 
@@ -49,15 +61,20 @@ python scripts/run_state_scrape.py --state NY
 NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
 NY_SCRAPE_MCA_TERM_LIMIT=3 NY_SCRAPE_MAX_PAGES=2 \
 python scripts/run_state_scrape.py --state NY --quick
+
+# Daily incremental — newest filings only (last 10 pages per term)
+NY_SCRAPE_PAGE_ORDER=recent_only NY_SCRAPE_RECENT_PAGES=10 \
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
+python scripts/run_state_scrape.py --state NY
 ```
 
-Logs include per-term `pages_fetched`, `rows_parsed`, and `inserts` (new unique filings).
+Logs include per-term `pager_total`, `page_order`, `pages_fetched`, `filing_date_min`/`max`, `rows_parsed`, and `inserts` (new unique filings).
 
 ## 4. Multi-day checkpoint strategy
 
 | Checkpoint | Key | Purpose |
 |------------|-----|---------|
-| Page index | `{profile}\|{term}` | Resume pagination for a profile+term |
+| Page index | `{profile}\|{term}` | Forward: last completed page 1→N. Reverse/recent: pages scraped from end |
 | Prefix offset | `debtor_org_sw` | Rotate A–Z / 0–9 / LLC prefix batch |
 
 Run daily:

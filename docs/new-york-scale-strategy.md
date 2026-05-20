@@ -24,7 +24,10 @@ Configured with `NY_SCRAPE_SEARCH_PROFILES` (comma-separated):
 | `debtor_org_sw` | Debtor org | Starts with (`SW`) | Prefix queue (`NY_SCRAPE_PREFIX_TERMS` or A–Z, 0–9, LLC, INC, CORP) rotated via checkpoint |
 | `debtor_org_bw` | Debtor org | Begins with (`BW`) | Same prefix queue (optional; enable when portal supports `BW`) |
 
-Checkpoints: `scraper_checkpoints.index_profile` = `{profile}|{term}`, `last_row_number` = last completed page.
+Checkpoints: `scraper_checkpoints.index_profile` = `{profile}|{term}`, `last_row_number` = page cursor:
+
+- **forward** (`NY_SCRAPE_PAGE_ORDER=forward`, default): last completed page index from page 1.
+- **reverse** / **recent_only**: count of pages scraped from the **last** page (resume at `total - completed`).
 
 Dedupe: in-memory per run by `filing_number` + DB upsert on `(state, filing_number)`.
 
@@ -39,9 +42,19 @@ NY_SCRAPE_MAX_TERMS=20          # terms per profile per run (prefix batch size)
 NY_SCRAPE_PAGE_CAP_PER_RUN=500  # optional global page budget per run
 NY_SCRAPE_FETCH_DETAIL=true     # detail when grid lacks secured_party
 NY_SCRAPE_SEARCH_TERMS=          # extra comma-separated terms (all profiles)
+NY_SCRAPE_PAGE_ORDER=forward     # forward | reverse | recent_only
+NY_SCRAPE_RECENT_PAGES=10        # last K pages when page_order=recent_only
 ```
 
 Shared fallbacks: `PLAYWRIGHT_SCRAPE_*`.
+
+### Pagination modes
+
+| `NY_SCRAPE_PAGE_ORDER` | Walk | Typical use |
+|------------------------|------|-------------|
+| `forward` | 1 → N | Initial backfill, full term depth |
+| `reverse` | N → 1 | Deep history from newest page first |
+| `recent_only` | Last K pages (`NY_SCRAPE_RECENT_PAGES`) | Daily delta without re-scraping old pages |
 
 ## Operator commands
 
@@ -50,6 +63,11 @@ Shared fallbacks: `PLAYWRIGHT_SCRAPE_*`.
 NY_SCRAPE_MAX_TERMS=3 NY_SCRAPE_MAX_PAGES=2 \
 NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
 python scripts/run_state_scrape.py --state NY
+
+# Daily recent filings — 2 newest pages per term
+NY_SCRAPE_PAGE_ORDER=recent_only NY_SCRAPE_RECENT_PAGES=2 \
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
+python scripts/run_state_scrape.py --state NY --quick
 
 # Filter one profile from CLI
 python scripts/run_state_scrape.py --state NY --profile debtor_org_sw --max-terms 5

@@ -78,6 +78,9 @@ class Settings(BaseSettings):
     NY_SCRAPE_PAGE_CAP_PER_RUN: int | None = None
     NY_SCRAPE_SEARCH_PROFILES: str = "secured_party_org_sw,debtor_org_sw"
     NY_SCRAPE_PREFIX_TERMS: str = ""
+    # Pagination direction: forward (page 1→N), reverse (last→first), recent_only (last K pages).
+    NY_SCRAPE_PAGE_ORDER: str = "forward"
+    NY_SCRAPE_RECENT_PAGES: int = 10
 
     NJ_SCRAPE_MAX_PAGES: int = 50
     NJ_SCRAPE_MAX_TERMS: int = 20

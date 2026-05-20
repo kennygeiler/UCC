@@ -3,8 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Literal
 
 from app.config import Settings
+
+PageOrder = Literal["forward", "reverse", "recent_only"]
+VALID_PAGE_ORDERS: frozenset[str] = frozenset({"forward", "reverse", "recent_only"})
 from app.scrapers.playwright_tier1.profiles import (
     DEFAULT_LEGACY_PROFILE,
     DEFAULT_NY_SEARCH_PROFILES,
@@ -28,6 +32,8 @@ class PlaywrightScrapeSettings:
     search_profiles: tuple[str, ...] = ()
     prefix_terms: tuple[str, ...] = ()
     profile_filter: str | None = None
+    page_order: PageOrder = "forward"
+    recent_pages: int = 10
 
 
 def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings:
@@ -105,6 +111,14 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
     if not profiles and code not in ("NY",):
         profiles = (DEFAULT_LEGACY_PROFILE,)
 
+    page_order: PageOrder = "forward"
+    recent_pages = 10
+    if settings and code == "NY":
+        raw_order = (getattr(settings, "NY_SCRAPE_PAGE_ORDER", None) or "forward").strip().lower()
+        if raw_order in VALID_PAGE_ORDERS:
+            page_order = raw_order  # type: ignore[assignment]
+        recent_pages = int(getattr(settings, "NY_SCRAPE_RECENT_PAGES", 10) or 10)
+
     return PlaywrightScrapeSettings(
         max_pages=max_pages,
         max_terms=max_terms,
@@ -115,4 +129,6 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
         search_profiles=profiles,
         prefix_terms=_prefix_terms(),
         profile_filter=None,
+        page_order=page_order,
+        recent_pages=recent_pages,
     )

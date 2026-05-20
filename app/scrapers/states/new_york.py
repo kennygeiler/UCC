@@ -24,7 +24,14 @@ from app.scrapers.parsers import parse_date
 from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
 from app.scrapers.playwright_tier1.checkpoints import get_page_checkpoint, save_page_checkpoint
 from app.scrapers.playwright_tier1.detail_fetch import fetch_secured_party_from_detail
-from app.scrapers.playwright_tier1.pagination import xhtml_grid_next_page
+from app.scrapers.playwright_tier1.pagination import (
+    read_pager_info,
+    xhtml_grid_goto_last_page,
+    xhtml_grid_goto_page,
+    xhtml_grid_next_page,
+    xhtml_grid_prev_page,
+)
+from app.scrapers.playwright_tier1.settings import PageOrder
 from app.scrapers.playwright_tier1.prefix_queue import (
     get_prefix_offset,
     save_prefix_offset,
@@ -242,6 +249,55 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         )
         return all_filings
 
+    def _page_budget_for_term(self, pages_remaining: int | None) -> int:
+        max_pages = self._effective_max_pages()
+        if pages_remaining is not None:
+            max_pages = min(max_pages, pages_remaining)
+        order = self.scrape_settings.page_order
+        if order == "recent_only":
+            max_pages = min(max_pages, self.scrape_settings.recent_pages)
+        return max_pages
+
+    @staticmethod
+    def _filing_date_bounds(rows: list[dict]) -> tuple[object | None, object | None]:
+        dates = [r["filing_date"] for r in rows if r.get("filing_date")]
+        if not dates:
+            return None, None
+        return min(dates), max(dates)
+
+    async def _scrape_current_grid_page(
+        self,
+        page,
+        *,
+        profile: SearchProfileSpec,
+        term: str,
+    ) -> list[dict]:
+        grid = await page.evaluate(_EXTRACT_GRID_JS)
+        headers = grid.get("headers") or []
+        sp_col = self._secured_party_column(headers)
+        page_rows: list[dict] = []
+        for row_idx, cells in enumerate(grid.get("rows") or []):
+            filing = self._row_to_filing(
+                cells,
+                profile=profile,
+                search_term=term,
+                secured_party_col=sp_col,
+            )
+            if not filing:
+                continue
+            need_detail = (
+                self.scrape_settings.fetch_detail
+                and not filing.get("secured_party")
+            )
+            if need_detail:
+                enriched = await self._enrich_row_detail(page, row_idx)
+                if enriched.get("secured_party"):
+                    filing["secured_party"] = enriched["secured_party"]
+                if enriched.get("filing_date") and not filing.get("filing_date"):
+                    filing["filing_date"] = enriched["filing_date"]
+            page_rows.append(filing)
+        return page_rows
+
     async def _search_term_paginated(
         self,
         page,
@@ -255,13 +311,66 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         if not await page.evaluate(_HAS_GRID_JS):
             return [], 0
 
+        page_current, page_total = await read_pager_info(page, _GRID)
+        page_order: PageOrder = self.scrape_settings.page_order
+        max_pages = self._page_budget_for_term(pages_remaining)
         completed_pages = await get_page_checkpoint(
             self.state_code, profile.name, term
         )
-        max_pages = self._effective_max_pages()
-        if pages_remaining is not None:
-            max_pages = min(max_pages, pages_remaining)
 
+        logger.info(
+            "pager_info",
+            profile=profile.name,
+            term=term,
+            page_current=page_current,
+            pager_total=page_total,
+            page_order=page_order,
+            checkpoint_pages=completed_pages,
+            max_pages=max_pages,
+        )
+
+        if page_order in ("reverse", "recent_only"):
+            rows, pages = await self._search_term_paginated_reverse(
+                page,
+                profile,
+                term,
+                page_total=page_total,
+                completed_from_end=completed_pages,
+                max_pages=max_pages,
+            )
+        else:
+            rows, pages = await self._search_term_paginated_forward(
+                page,
+                profile,
+                term,
+                completed_pages=completed_pages,
+                max_pages=max_pages,
+            )
+
+        date_min, date_max = self._filing_date_bounds(rows)
+        logger.info(
+            "search_term_paginated",
+            profile=profile.name,
+            term=term,
+            pager_total=page_total,
+            page_order=page_order,
+            pages_fetched=pages,
+            rows_parsed=len(rows),
+            filing_date_min=date_min,
+            filing_date_max=date_max,
+        )
+        return rows, pages
+
+    async def _search_term_paginated_forward(
+        self,
+        page,
+        profile: SearchProfileSpec,
+        term: str,
+        *,
+        completed_pages: int,
+        max_pages: int,
+    ) -> tuple[list[dict], int]:
+        """Forward walk: page 1 → N; checkpoint = last completed forward page."""
         all_rows: list[dict] = []
         pages_consumed = 0
 
@@ -273,39 +382,73 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         while page_index < max_pages:
             page_index += 1
             pages_consumed += 1
-
-            grid = await page.evaluate(_EXTRACT_GRID_JS)
-            headers = grid.get("headers") or []
-            sp_col = self._secured_party_column(headers)
-
-            for row_idx, cells in enumerate(grid.get("rows") or []):
-                filing = self._row_to_filing(
-                    cells,
-                    profile=profile,
-                    search_term=term,
-                    secured_party_col=sp_col,
+            all_rows.extend(
+                await self._scrape_current_grid_page(
+                    page, profile=profile, term=term
                 )
-                if not filing:
-                    continue
-                need_detail = (
-                    self.scrape_settings.fetch_detail
-                    and not filing.get("secured_party")
-                )
-                if need_detail:
-                    enriched = await self._enrich_row_detail(page, row_idx)
-                    if enriched.get("secured_party"):
-                        filing["secured_party"] = enriched["secured_party"]
-                    if enriched.get("filing_date") and not filing.get("filing_date"):
-                        filing["filing_date"] = enriched["filing_date"]
-                all_rows.append(filing)
-
+            )
             await save_page_checkpoint(
                 self.state_code, profile.name, term, page_index
             )
-
             if page_index >= max_pages:
                 break
             if not await xhtml_grid_next_page(page):
+                break
+            if not await page.evaluate(_HAS_GRID_JS):
+                break
+
+        return all_rows, pages_consumed
+
+    async def _search_term_paginated_reverse(
+        self,
+        page,
+        profile: SearchProfileSpec,
+        term: str,
+        *,
+        page_total: int,
+        completed_from_end: int,
+        max_pages: int,
+    ) -> tuple[list[dict], int]:
+        """Reverse walk from last page; checkpoint = pages scraped from end."""
+        all_rows: list[dict] = []
+        pages_consumed = 0
+
+        if page_total <= 0:
+            page_current, page_total = await read_pager_info(page, _GRID)
+            if page_total <= 0:
+                page_total = max(page_current, 1)
+
+        total = max(page_total, 1)
+        if completed_from_end >= max_pages:
+            return all_rows, 0
+
+        if completed_from_end > 0:
+            resume_page = max(1, total - completed_from_end)
+            if resume_page < total:
+                await xhtml_grid_goto_page(page, resume_page)
+            else:
+                await xhtml_grid_goto_last_page(page, _GRID)
+        else:
+            await xhtml_grid_goto_last_page(page, _GRID)
+
+        pages_from_end = completed_from_end
+        while pages_from_end < max_pages:
+            pages_from_end += 1
+            pages_consumed += 1
+            all_rows.extend(
+                await self._scrape_current_grid_page(
+                    page, profile=profile, term=term
+                )
+            )
+            await save_page_checkpoint(
+                self.state_code, profile.name, term, pages_from_end
+            )
+            if pages_from_end >= max_pages:
+                break
+            _current, _total = await read_pager_info(page, _GRID)
+            if _current <= 1:
+                break
+            if not await xhtml_grid_prev_page(page):
                 break
             if not await page.evaluate(_HAS_GRID_JS):
                 break
