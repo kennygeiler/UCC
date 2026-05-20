@@ -92,7 +92,7 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
 
     max_pages = _get_int("PLAYWRIGHT_SCRAPE_MAX_PAGES", f"{prefix}_MAX_PAGES", 50)
     max_terms = _get_int("PLAYWRIGHT_SCRAPE_MAX_TERMS", f"{prefix}_MAX_TERMS", 20)
-    mca_default = 100 if code == "NY" else 20
+    mca_default = 200 if code == "NY" else 20
     mca_limit = _get_int("PLAYWRIGHT_SCRAPE_MCA_TERM_LIMIT", f"{prefix}_MCA_TERM_LIMIT", mca_default)
     fetch_detail = _get_bool("PLAYWRIGHT_SCRAPE_FETCH_DETAIL", f"{prefix}_FETCH_DETAIL", True)
     page_cap = None

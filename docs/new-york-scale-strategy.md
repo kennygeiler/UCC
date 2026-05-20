@@ -20,7 +20,7 @@ Configured with `NY_SCRAPE_SEARCH_PROFILES` (comma-separated):
 
 | Profile | Party | Logic | Terms |
 |---------|-------|-------|-------|
-| `secured_party_org_sw` | Secured party | Starts with (`SW`) | Top `NY_SCRAPE_MCA_TERM_LIMIT` MCA aliases (default **100**) + `NY_SCRAPE_SEARCH_TERMS` |
+| `secured_party_org_sw` | Secured party | Starts with (`SW`) | `min(mca_funder count, NY_SCRAPE_MCA_TERM_LIMIT)` aliases (default **200**) + `NY_SCRAPE_SEARCH_TERMS` |
 | `debtor_org_sw` | Debtor org | Starts with (`SW`) | Prefix queue (`NY_SCRAPE_PREFIX_TERMS` or A–Z, 0–9, LLC, INC, CORP) rotated via checkpoint |
 | `debtor_org_bw` | Debtor org | Begins with (`BW`) | Same prefix queue (optional; enable when portal supports `BW`) |
 
@@ -32,7 +32,7 @@ Dedupe: in-memory per run by `filing_number` + DB upsert on `(state, filing_numb
 
 ```bash
 NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw,debtor_org_sw
-NY_SCRAPE_MCA_TERM_LIMIT=100
+NY_SCRAPE_MCA_TERM_LIMIT=200
 NY_SCRAPE_PREFIX_TERMS=A,B,C,...,Z,0,1,...,9,LLC,INC,CORP   # optional override
 NY_SCRAPE_MAX_PAGES=50
 NY_SCRAPE_MAX_TERMS=20          # terms per profile per run (prefix batch size)
@@ -65,7 +65,7 @@ psql "$DATABASE_URL" -c "
 
 ## Expected volume (order of magnitude)
 
-- **Secured-party MCA sweep:** ~100 terms × up to `NY_SCRAPE_MAX_PAGES` pages each — primary path to MCA-relevant filings (secured party populated from term or grid).
+- **Secured-party MCA sweep:** up to `min(alias count, NY_SCRAPE_MCA_TERM_LIMIT)` terms (default cap **200** after deBanked import) × up to `NY_SCRAPE_MAX_PAGES` pages each — primary path to MCA-relevant filings.
 - **Debtor prefix sweep:** 39 default prefixes × pages — broad debtor discovery; rotate prefixes across runs with `max_terms`.
 - **Multi-day:** Run daily with checkpoints; prefix cursor advances automatically.
 
@@ -74,7 +74,18 @@ psql "$DATABASE_URL" -c "
 - `NJ_SCRAPE_SEARCH_PROFILES` is wired in settings for future secured-party mode; NJ still uses legacy `search` checkpoint profile until portal recon adds SP search.
 - CA/TX unchanged; NY work does not alter Florida REST scraper.
 
+## deBanked alias import
+
+Import the public MCA UCC alias table before large secured-party runs:
+
+```bash
+python -m scripts.import_debanked_mca_aliases
+```
+
+See [ny-volume-playbook.md](ny-volume-playbook.md) for operator steps.
+
 ## Related docs
 
+- [ny-volume-playbook.md](ny-volume-playbook.md)
 - [playwright-tier1-scrape-strategy.md](playwright-tier1-scrape-strategy.md)
 - [README.md](../README.md) — Tier 1 manual scrape section

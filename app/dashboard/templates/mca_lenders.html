@@ -21,6 +21,25 @@
         </div>
 
         <div class="bg-white rounded-lg shadow p-6 mb-6">
+            <h2 class="text-lg font-semibold mb-3">Import deBanked list</h2>
+            <p class="text-sm text-gray-600 mb-3">
+                Loads the public MCA UCC alias table (~80+ funders) into
+                <code class="text-xs bg-gray-100 px-1 rounded">mca_aliases</code>
+                with <code class="text-xs bg-gray-100 px-1 rounded">source=debanked</code>.
+                Idempotent — existing aliases are updated, not duplicated.
+            </p>
+            <form hx-post="/dashboard/mca-lenders/import-debanked"
+                hx-target="#aliases-results"
+                hx-swap="innerHTML"
+                class="mb-2">
+                <button type="submit"
+                    class="rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700">
+                    Import deBanked list
+                </button>
+            </form>
+        </div>
+
+        <div class="bg-white rounded-lg shadow p-6 mb-6">
             <h2 class="text-lg font-semibold mb-3">Add alias</h2>
             <form class="grid grid-cols-1 md:grid-cols-2 gap-4"
                 hx-post="/dashboard/mca-lenders"

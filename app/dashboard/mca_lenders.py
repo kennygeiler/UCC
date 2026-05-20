@@ -135,6 +135,56 @@ async def mca_lender_create(
     return JSONResponse({"status": "created"})
 
 
+@router.post("/import-debanked")
+async def mca_import_debanked(request: Request):
+    from app.mca.debanked_import import import_debanked_mca_aliases
+
+    try:
+        stats = await import_debanked_mca_aliases(use_live_fetch=False)
+        import_message = (
+            f"deBanked import complete — added {stats.added}, "
+            f"updated {stats.updated}, registered_agent {stats.registered_agent}."
+        )
+        import_ok = True
+    except Exception as exc:
+        logger.error("debanked_import_failed", error=str(exc))
+        import_message = f"Import failed: {str(exc)[:300]}"
+        import_ok = False
+    ctx = await _aliases_context(request)
+    ctx["import_message"] = import_message
+    ctx["import_ok"] = import_ok
+    if request.headers.get("HX-Request"):
+        return templates.TemplateResponse(
+            request,
+            "partials/mca_lenders_import_result.html",
+            context=ctx,
+        )
+    return JSONResponse({"status": "ok" if import_ok else "error", "message": import_message})
+
+
+@router.post("/reclassify")
+async def mca_reclassify(
+    request: Request,
+    background_tasks: BackgroundTasks,
+    state: str = Form("FL"),
+):
+    if _reclassify_status.get("running"):
+        msg = '<p class="text-amber-600 text-sm">Reclassification already running.</p>'
+        if request.headers.get("HX-Request"):
+            return HTMLResponse(msg, status_code=409)
+        return JSONResponse({"status": "already_running"}, status_code=409)
+    background_tasks.add_task(_run_reclassify_job, state.strip().upper())
+    msg = '<p class="text-blue-600 text-sm">Reclassifying filings and refreshing MCA accounts…</p>'
+    if request.headers.get("HX-Request"):
+        return HTMLResponse(msg)
+    return JSONResponse({"status": "started"})
+
+
+@router.get("/reclassify/status")
+async def mca_reclassify_status():
+    return JSONResponse(dict(_reclassify_status))
+
+
 @router.post("/{alias_id}", response_class=HTMLResponse)
 async def mca_lender_update(
     request: Request,
@@ -176,26 +226,3 @@ async def mca_lender_delete(request: Request, alias_id: int):
             context=await _aliases_context(request),
         )
     return JSONResponse({"status": "deleted"})
-
-
-@router.post("/reclassify")
-async def mca_reclassify(
-    request: Request,
-    background_tasks: BackgroundTasks,
-    state: str = Form("FL"),
-):
-    if _reclassify_status.get("running"):
-        msg = '<p class="text-amber-600 text-sm">Reclassification already running.</p>'
-        if request.headers.get("HX-Request"):
-            return HTMLResponse(msg, status_code=409)
-        return JSONResponse({"status": "already_running"}, status_code=409)
-    background_tasks.add_task(_run_reclassify_job, state.strip().upper())
-    msg = '<p class="text-blue-600 text-sm">Reclassifying filings and refreshing MCA accounts…</p>'
-    if request.headers.get("HX-Request"):
-        return HTMLResponse(msg)
-    return JSONResponse({"status": "started"})
-
-
-@router.get("/reclassify/status")
-async def mca_reclassify_status():
-    return JSONResponse(dict(_reclassify_status))

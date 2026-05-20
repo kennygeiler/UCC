@@ -146,10 +146,12 @@ class NewYorkScraper(PlaywrightTier1Scraper):
     async def _load_terms_for_profile(self, profile: SearchProfileSpec) -> list[str]:
         s = self.scrape_settings
         if profile.term_source == TermSource.MCA_ALIASES:
+            # Secured-party sweeps use the full MCA alias pool (up to mca_term_limit),
+            # not the smaller NY_SCRAPE_MAX_TERMS cap used for debtor prefix batches.
             return await build_search_term_list(
                 mca_limit=s.mca_term_limit,
                 extra_terms=s.extra_search_terms,
-                max_terms=s.max_terms,
+                max_terms=s.mca_term_limit,
             )
         offset = await get_prefix_offset(self.state_code, profile.name)
         batch, next_offset = slice_prefix_terms(
@@ -197,23 +199,28 @@ class NewYorkScraper(PlaywrightTier1Scraper):
                         remaining = None
                         if page_budget is not None:
                             remaining = max(0, page_budget - pages_used)
+                        before_unique = len(all_filings)
                         rows, pages = await self._search_term_paginated(
                             page, profile, term, pages_remaining=remaining
                         )
                         pages_used += pages
+                        inserts = 0
                         for row in rows:
                             fn = row.get("filing_number", "")
                             if fn and fn not in seen:
                                 seen.add(fn)
                                 all_filings.append(row)
                                 profile_count += 1
+                                inserts += 1
                         logger.info(
                             "search_batch",
                             profile=profile.name,
                             term=term,
-                            raw=len(rows),
-                            pages=pages,
+                            pages_fetched=pages,
+                            rows_parsed=len(rows),
+                            inserts=inserts,
                             unique_so_far=len(all_filings),
+                            new_unique=len(all_filings) - before_unique,
                         )
                     except Exception as exc:
                         logger.warning(

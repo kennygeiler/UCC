@@ -1,0 +1,89 @@
+# New York volume playbook
+
+Operator steps to maximize NY UCC filing volume after importing the deBanked MCA alias list.
+
+## 1. Import deBanked aliases
+
+```bash
+# Bundled CSV (recommended — reproducible)
+python -m scripts.import_debanked_mca_aliases
+
+# Live fetch from debanked.com
+python -m scripts.import_debanked_mca_aliases --live
+
+# Dashboard: MCA Lenders → Import deBanked list
+```
+
+Verify:
+
+```sql
+SELECT COUNT(*) FROM mca_aliases WHERE source = 'debanked';
+SELECT COUNT(*) FROM mca_aliases WHERE source = 'debanked' AND lender_class = 'mca_funder';
+```
+
+Expect roughly **100+** `mca_funder` aliases and a handful of `registered_agent` rows (CSC / CT Corporation variants). First Data and Lending Club are **not** imported.
+
+## 2. Configure NY secured-party sweep
+
+In `.env` (see `.env.example`):
+
+```bash
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw,debtor_org_sw
+NY_SCRAPE_MCA_TERM_LIMIT=200          # min(alias count, 200) for secured_party
+NY_SCRAPE_MAX_TERMS=20                # debtor prefix batch size only
+NY_SCRAPE_MAX_PAGES=50
+NY_SCRAPE_FETCH_DETAIL=true
+# NY_SCRAPE_PAGE_CAP_PER_RUN=500      # optional daily page budget
+```
+
+**Profile order:** `secured_party_org_sw` runs first (MCA aliases from DB), then `debtor_org_sw` (prefix queue).
+
+## 3. Run secured-party full scrape
+
+```bash
+# Full MCA secured-party sweep (uses up to NY_SCRAPE_MCA_TERM_LIMIT aliases)
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
+python scripts/run_state_scrape.py --state NY
+
+# Smoke — 3 MCA terms, 2 pages
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
+NY_SCRAPE_MCA_TERM_LIMIT=3 NY_SCRAPE_MAX_PAGES=2 \
+python scripts/run_state_scrape.py --state NY --quick
+```
+
+Logs include per-term `pages_fetched`, `rows_parsed`, and `inserts` (new unique filings).
+
+## 4. Multi-day checkpoint strategy
+
+| Checkpoint | Key | Purpose |
+|------------|-----|---------|
+| Page index | `{profile}\|{term}` | Resume pagination for a profile+term |
+| Prefix offset | `debtor_org_sw` | Rotate A–Z / 0–9 / LLC prefix batch |
+
+Run daily:
+
+1. **Day 1–N:** `secured_party_org_sw` — one run can cover up to 200 MCA terms × `NY_SCRAPE_MAX_PAGES` pages each (subject to `NY_SCRAPE_PAGE_CAP_PER_RUN`).
+2. **Rotate debtor prefixes:** `debtor_org_sw` with `NY_SCRAPE_MAX_TERMS=20` advances the prefix queue automatically.
+3. Re-run after import or alias edits; checkpoints skip completed pages.
+
+## 5. What volume to expect
+
+| Path | Rough order of magnitude |
+|------|---------------------------|
+| Secured-party MCA (post-deBanked) | Up to **200 terms** × up to **50 pages** / term (portal caps apply per query) |
+| Debtor prefix sweep | **20 prefixes** / run × pages (rotates across days) |
+| Single run total | Hundreds–low thousands **unique** filings (deduped by filing number) |
+
+**Honest limits:** deBanked improves *what you search for* (MCA funders as secured party). The NY Cenuity portal still limits pages per query and requires one search per term — there is no Florida-style empty-text statewide index.
+
+## 6. Reclassify after import (optional)
+
+```bash
+python -m scripts.sync_mca_leads   # or dashboard Reclassify FL filings
+# NY filings: set state=NY on reclassify form when supported
+```
+
+## Related
+
+- [new-york-scale-strategy.md](new-york-scale-strategy.md)
+- [playwright-tier1-scrape-strategy.md](playwright-tier1-scrape-strategy.md)

@@ -133,6 +133,7 @@ async def test_build_search_terms_mca_and_extra(monkeypatch):
         "load_mca_search_terms",
         AsyncMock(return_value=["ONDECK CAPITAL", "CREDIBLY"]),
     )
+    monkeypatch.setattr(st, "count_mca_funder_aliases", AsyncMock(return_value=50))
     terms = await st.build_search_term_list(
         mca_limit=20,
         extra_terms=("CUSTOM TERM",),
@@ -171,7 +172,7 @@ def test_load_playwright_scrape_settings_from_env(monkeypatch):
     assert settings.max_pages == 7
     assert settings.max_terms == 4
     assert settings.search_profiles == ("secured_party_org_sw", "debtor_org_sw")
-    assert settings.mca_term_limit == 100
+    assert settings.mca_term_limit == 200
 
 
 def test_ny_fixture_html_has_grid():

@@ -72,7 +72,7 @@ class Settings(BaseSettings):
 
     NY_SCRAPE_MAX_PAGES: int = 50
     NY_SCRAPE_MAX_TERMS: int = 20
-    NY_SCRAPE_MCA_TERM_LIMIT: int = 100
+    NY_SCRAPE_MCA_TERM_LIMIT: int = 200
     NY_SCRAPE_FETCH_DETAIL: bool = True
     NY_SCRAPE_SEARCH_TERMS: str = ""
     NY_SCRAPE_PAGE_CAP_PER_RUN: int | None = None

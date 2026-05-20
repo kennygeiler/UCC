@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 
 from app.db import get_session
 from app.logging import get_logger
@@ -26,8 +26,19 @@ _FALLBACK_TERMS: tuple[str, ...] = (
 )
 
 
-async def load_mca_search_terms(*, limit: int = 20) -> list[str]:
-    """Top MCA alias names from DB, else seed list, uppercased for org search."""
+async def count_mca_funder_aliases() -> int:
+    """Count aliases tagged ``mca_funder`` (used to cap NY secured-party sweeps)."""
+    async with get_session() as session:
+        result = await session.execute(
+            select(func.count())
+            .select_from(MCAlias)
+            .where(MCAlias.lender_class == "mca_funder")
+        )
+        return int(result.scalar_one())
+
+
+async def load_mca_search_terms(*, limit: int = 200) -> list[str]:
+    """MCA ``mca_funder`` alias names from DB, else seed list, uppercased for org search."""
     names: list[str] = []
     async with get_session() as session:
         result = await session.execute(
@@ -64,10 +75,12 @@ async def build_search_term_list(
     max_terms: int | None = None,
 ) -> list[str]:
     """MCA terms + env extras, deduped, capped."""
+    funder_count = await count_mca_funder_aliases()
+    effective_mca_limit = min(funder_count, mca_limit) if funder_count else mca_limit
     terms: list[str] = []
     seen: set[str] = set()
 
-    for term in await load_mca_search_terms(limit=mca_limit):
+    for term in await load_mca_search_terms(limit=effective_mca_limit):
         key = term.strip().upper()
         if key and key not in seen:
             seen.add(key)
