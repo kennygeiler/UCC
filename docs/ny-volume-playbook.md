@@ -40,6 +40,8 @@ NY_SCRAPE_FETCH_DETAIL=true
 
 **Profile order:** `secured_party_org_sw` runs first (MCA aliases from DB), then `debtor_org_sw` (prefix queue).
 
+**Variant secured-party terms:** `NY_SCRAPE_MCA_TERM_LIMIT` caps **funders** (canonical lenders), not raw alias rows. Each funder expands to multiple portal queries: every distinct `mca_aliases` name for that lender, plus a **first significant token** (e.g. `YELLOWSTONE` from `YELLOWSTONE CAPITAL LLC`). Optional `NY_SCRAPE_VARIANT_LIMIT` caps variants per funder. Add `secured_party_org_bw` to profiles for **begins with** (`BW`) in addition to **starts with** (`SW`). Checkpoints use `{profile}|{term}` so variants do not collide.
+
 **Pagination order:** `NY_SCRAPE_PAGE_ORDER` controls grid direction per term:
 
 | Value | Behavior |
@@ -53,7 +55,11 @@ Reverse/recent checkpoints store **pages scraped from the end** (resume jumps to
 ## 3. Run secured-party full scrape
 
 ```bash
-# Full MCA secured-party sweep (uses up to NY_SCRAPE_MCA_TERM_LIMIT aliases)
+# Full MCA secured-party sweep (funders × variants; SW + optional BW)
+NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw,secured_party_org_bw \
+python scripts/run_state_scrape.py --state NY
+
+# SW only (default profile list omits BW unless you add it)
 NY_SCRAPE_SEARCH_PROFILES=secured_party_org_sw \
 python scripts/run_state_scrape.py --state NY
 

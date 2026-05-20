@@ -28,6 +28,7 @@ class PlaywrightScrapeSettings:
     fetch_detail: bool
     mca_term_limit: int
     extra_search_terms: tuple[str, ...]
+    variant_limit_per_funder: int | None = None
     page_cap_per_run: int | None = None
     search_profiles: tuple[str, ...] = ()
     prefix_terms: tuple[str, ...] = ()
@@ -100,6 +101,11 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
     max_terms = _get_int("PLAYWRIGHT_SCRAPE_MAX_TERMS", f"{prefix}_MAX_TERMS", 20)
     mca_default = 200 if code == "NY" else 20
     mca_limit = _get_int("PLAYWRIGHT_SCRAPE_MCA_TERM_LIMIT", f"{prefix}_MCA_TERM_LIMIT", mca_default)
+    variant_limit: int | None = None
+    if settings and code == "NY" and "NY_SCRAPE_VARIANT_LIMIT" in type(settings).model_fields:
+        raw_var = getattr(settings, "NY_SCRAPE_VARIANT_LIMIT", None)
+        if raw_var is not None and int(raw_var) > 0:
+            variant_limit = int(raw_var)
     fetch_detail = _get_bool("PLAYWRIGHT_SCRAPE_FETCH_DETAIL", f"{prefix}_FETCH_DETAIL", True)
     page_cap = None
     if settings and f"{prefix}_PAGE_CAP_PER_RUN" in type(settings).model_fields:
@@ -124,6 +130,7 @@ def load_playwright_scrape_settings(state_code: str) -> PlaywrightScrapeSettings
         max_terms=max_terms,
         fetch_detail=fetch_detail,
         mca_term_limit=mca_limit,
+        variant_limit_per_funder=variant_limit,
         extra_search_terms=_terms(),
         page_cap_per_run=page_cap,
         search_profiles=profiles,

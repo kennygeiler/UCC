@@ -96,9 +96,10 @@ Readiness in `state_config.py`: **FL = `ready`**. Playwright states stay **`play
 ## Search strategies
 
 1. **MCA lender terms** — `search_terms.load_mca_search_terms(limit=PLAYWRIGHT_SCRAPE_MCA_TERM_LIMIT)` from `mca_aliases`, then seed list if DB empty.
-2. **Env extensions** — `{STATE}_SCRAPE_SEARCH_TERMS` or `PLAYWRIGHT_SCRAPE_SEARCH_TERMS` (comma-separated).
-3. **Pagination** — Loop until no next page or `max_pages` per term.
-4. **Optional date filters** — CA already uses `SCRAPER_FILING_LOOKBACK_DAYS`; NY/NJ public search has limited date filtering (document only).
+2. **NY secured-party variants** — `build_secured_party_variant_terms`: group aliases by canonical funder (`NY_SCRAPE_MCA_TERM_LIMIT` = max funders), expand each funder to full alias strings + first significant token (suffixes stripped), optional `NY_SCRAPE_VARIANT_LIMIT` per funder. Profiles `secured_party_org_sw` / `secured_party_org_bw` share the term list; checkpoints key `{profile}|{term}`.
+3. **Env extensions** — `{STATE}_SCRAPE_SEARCH_TERMS` or `PLAYWRIGHT_SCRAPE_SEARCH_TERMS` (comma-separated).
+4. **Pagination** — Loop until no next page or `max_pages` per term.
+5. **Optional date filters** — CA already uses `SCRAPER_FILING_LOOKBACK_DAYS`; NY/NJ public search has limited date filtering (document only).
 
 Dedupe: in-memory per run + DB upsert on `(state, filing_number)`.
 

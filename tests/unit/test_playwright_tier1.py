@@ -117,6 +117,77 @@ def test_parse_ny_profiles_from_env_string():
     assert parsed == ("secured_party_org_sw", "debtor_org_sw")
 
 
+def test_first_significant_token_strips_suffixes():
+    from app.scrapers.playwright_tier1.search_terms import first_significant_token
+
+    assert first_significant_token("Yellowstone Capital LLC") == "YELLOWSTONE"
+    assert first_significant_token("ONDECK CAPITAL LLC") == "ONDECK"
+    assert first_significant_token("LLC") is None
+
+
+def test_expand_secured_party_variants_dedupes():
+    from app.scrapers.playwright_tier1.search_terms import expand_secured_party_search_terms
+
+    terms = expand_secured_party_search_terms(
+        ["Yellowstone Capital LLC", "YELLOWSTONE CAPITAL LLC"],
+        variant_limit=None,
+    )
+    assert terms == ["YELLOWSTONE CAPITAL LLC", "YELLOWSTONE"]
+
+
+def test_expand_secured_party_variants_multiple_aliases():
+    from app.scrapers.playwright_tier1.search_terms import expand_secured_party_search_terms
+
+    terms = expand_secured_party_search_terms(
+        ["Pearl Capital", "Pearl Cash", "Horizon Business Funding"],
+    )
+    assert "PEARL CAPITAL" in terms
+    assert "PEARL" in terms
+    assert "PEARL CASH" in terms
+    assert "HORIZON BUSINESS FUNDING" in terms
+    assert "HORIZON" in terms
+
+
+@pytest.mark.asyncio
+async def test_build_secured_party_variant_terms(monkeypatch):
+    from app.scrapers.playwright_tier1 import search_terms as st
+
+    monkeypatch.setattr(
+        st,
+        "load_mca_funder_alias_groups",
+        AsyncMock(
+            return_value=[
+                ["YELLOWSTONE CAPITAL LLC"],
+                ["ONDECK CAPITAL", "ON DECK CAPITAL LLC"],
+            ]
+        ),
+    )
+    monkeypatch.setattr(st, "count_mca_funder_aliases", AsyncMock(return_value=100))
+    terms = await st.build_secured_party_variant_terms(
+        funder_limit=2,
+        variant_limit_per_funder=None,
+        extra_terms=("CUSTOM",),
+    )
+    assert "YELLOWSTONE CAPITAL LLC" in terms
+    assert "YELLOWSTONE" in terms
+    assert "ONDECK CAPITAL" in terms
+    assert "ONDECK" in terms
+    assert "ON DECK CAPITAL LLC" in terms
+    assert "CUSTOM" in terms
+
+
+def test_search_profile_key_bw_profile():
+    assert search_profile_key("secured_party_org_bw", "YELLOWSTONE") == (
+        "secured_party_org_bw|YELLOWSTONE"
+    )
+
+
+def test_ny_secured_party_bw_profile_exists():
+    bw = NY_SEARCH_PROFILES["secured_party_org_bw"]
+    assert bw.search_logic == "BW"
+    assert bw.party_mode == PartySearchMode.SECURED
+
+
 def test_prefix_queue_slice_rotates():
     terms = ("A", "B", "C", "D")
     batch, nxt = slice_prefix_terms(terms, offset=2, max_terms=2)

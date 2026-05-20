@@ -38,6 +38,12 @@ NY_SEARCH_PROFILES: dict[str, SearchProfileSpec] = {
         search_logic="SW",
         term_source=TermSource.MCA_ALIASES,
     ),
+    "secured_party_org_bw": SearchProfileSpec(
+        name="secured_party_org_bw",
+        party_mode=PartySearchMode.SECURED,
+        search_logic="BW",
+        term_source=TermSource.MCA_ALIASES,
+    ),
     "debtor_org_sw": SearchProfileSpec(
         name="debtor_org_sw",
         party_mode=PartySearchMode.DEBTOR,

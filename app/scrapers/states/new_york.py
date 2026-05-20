@@ -43,7 +43,10 @@ from app.scrapers.playwright_tier1.profiles import (
     SearchProfileSpec,
     TermSource,
 )
-from app.scrapers.playwright_tier1.search_terms import build_search_term_list
+from app.scrapers.playwright_tier1.search_terms import (
+    build_search_term_list,
+    build_secured_party_variant_terms,
+)
 from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 
 logger = get_logger("ny_scraper")
@@ -153,12 +156,11 @@ class NewYorkScraper(PlaywrightTier1Scraper):
     async def _load_terms_for_profile(self, profile: SearchProfileSpec) -> list[str]:
         s = self.scrape_settings
         if profile.term_source == TermSource.MCA_ALIASES:
-            # Secured-party sweeps use the full MCA alias pool (up to mca_term_limit),
-            # not the smaller NY_SCRAPE_MAX_TERMS cap used for debtor prefix batches.
-            return await build_search_term_list(
-                mca_limit=s.mca_term_limit,
+            # Funder limit applies before variant expansion (first token + each alias).
+            return await build_secured_party_variant_terms(
+                funder_limit=s.mca_term_limit,
+                variant_limit_per_funder=s.variant_limit_per_funder,
                 extra_terms=s.extra_search_terms,
-                max_terms=s.mca_term_limit,
             )
         offset = await get_prefix_offset(self.state_code, profile.name)
         batch, next_offset = slice_prefix_terms(
