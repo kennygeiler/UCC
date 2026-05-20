@@ -56,11 +56,15 @@ DEFAULT_LEGACY_PROFILE = "search"
 
 
 def default_prefix_terms() -> tuple[str, ...]:
-    """A–Z, 0–9, and common org suffix tokens for debtor prefix sweeps."""
-    letters = tuple(chr(c) for c in range(ord("A"), ord("Z") + 1))
-    digits = tuple(str(d) for d in range(10))
-    suffixes = ("LLC", "INC", "CORP")
-    return letters + digits + suffixes
+    """All 3-letter prefixes (AAA–ZZZ) for debtor-name starts-with sweeps.
+
+    The NY portal rejects search terms shorter than 3 characters, so
+    single-letter prefixes do not work. This is exhaustive coverage; an
+    operator can set NY_SCRAPE_PREFIX_TERMS to a curated high-yield subset
+    (or raise NY_SCRAPE_MAX_TERMS) for faster prefix-queue cycling.
+    """
+    letters = [chr(c) for c in range(ord("A"), ord("Z") + 1)]
+    return tuple(a + b + c for a in letters for b in letters for c in letters)
 
 
 def parse_profile_list(raw: str, *, valid: dict[str, SearchProfileSpec]) -> tuple[str, ...]:
