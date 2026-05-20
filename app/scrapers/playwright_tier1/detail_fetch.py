@@ -42,56 +42,6 @@ def parse_detail_fields_from_text(text: str) -> dict[str, str | None]:
     return {"secured_party": secured, "filing_date": filing_date}
 
 
-async def fetch_secured_party_from_detail(page, *, lien_selector: str) -> dict[str, str | None]:
-    """Click a grid lien link and scrape secured party / filing date from detail view.
-
-    Returns dict with optional ``secured_party`` and ``filing_date`` (ISO date str).
-    On failure returns empty values (caller keeps grid values).
-    """
-    try:
-        link = page.locator(lien_selector).first
-        if not await link.count():
-            return {"secured_party": None, "filing_date": None}
-
-        async with page.expect_navigation(wait_until="networkidle", timeout=45_000):
-            await link.click()
-
-        detail = await page.evaluate(
-            """() => {
-                const parts = [];
-                document.querySelectorAll('table tr').forEach(tr => {
-                    const cells = Array.from(tr.querySelectorAll('th, td'))
-                        .map(c => (c.innerText || '').trim())
-                        .filter(Boolean);
-                    if (cells.length >= 2) {
-                        parts.push(cells[0] + ': ' + cells.slice(1).join(' '));
-                    } else if (cells.length === 1) {
-                        parts.push(cells[0]);
-                    }
-                });
-                document.querySelectorAll('dl dt, dl dd, .row, .form-group label')
-                    .forEach(el => {
-                        const t = (el.innerText || '').trim();
-                        if (t) parts.push(t);
-                    });
-                return parts.join('\\n');
-            }"""
-        )
-        parsed = parse_detail_fields_from_text(detail)
-        if not parsed.get("secured_party"):
-            body_text = await page.evaluate("() => document.body.innerText || ''")
-            parsed = parse_detail_fields_from_text(body_text)
-
-        await page.go_back(wait_until="networkidle", timeout=45_000)
-        return parsed
-    except Exception:
-        try:
-            await page.go_back(wait_until="networkidle", timeout=30_000)
-        except Exception:
-            pass
-        return {"secured_party": None, "filing_date": None}
-
-
 def _extract_labeled_value(text: str, label_re: re.Pattern[str]) -> str | None:
     lines = text.splitlines()
     for i, line in enumerate(lines):

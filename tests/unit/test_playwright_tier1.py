@@ -102,6 +102,38 @@ def test_ny_filing_date_from_disabled(monkeypatch):
     assert scraper._filing_date_from() is None
 
 
+def test_parse_ny_lien_detail_extracts_secured_party():
+    from app.scrapers.states.new_york import _parse_ny_lien_detail
+
+    tables = [
+        [
+            ["Lien Number", "Serial Number", "Status", "Date Filed",
+             "Lien Type", "Subtype", "Lapse Date"],
+            ["604112", "", "Inactive", "02/10/1987", "UCC Lien", "", "2/10/2022"],
+        ],
+        [
+            ["Debtor Name", "Organization ID", "Organization Type",
+             "Organization Jurisdiction", "Debtor Address", "Debtor Type"],
+            ["AARON REZNY INC", "", "", "", "NA, 0", "Organization"],
+        ],
+        [
+            ["Secured Party Name", "Secured Party Address", "Secured Party Type"],
+            ["CITIBANK, N.A.", "NA, 0", "Organization"],
+        ],
+    ]
+    result = _parse_ny_lien_detail(tables)
+    assert result["secured_party"] == "CITIBANK, N.A."
+    assert result["filing_date"] is not None
+
+
+def test_parse_ny_lien_detail_no_secured_party():
+    from app.scrapers.states.new_york import _parse_ny_lien_detail
+
+    result = _parse_ny_lien_detail([[["Debtor Name"], ["ACME LLC"]]])
+    assert result["secured_party"] is None
+    assert result["filing_date"] is None
+
+
 def test_parse_ny_profiles_from_env_string():
     parsed = parse_profile_list(
         "debtor_org_sw, debtor_org_bw, unknown",

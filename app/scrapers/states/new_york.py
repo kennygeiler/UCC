@@ -25,7 +25,6 @@ from app.logging import get_logger
 from app.scrapers.parsers import parse_date
 from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
 from app.scrapers.playwright_tier1.checkpoints import get_page_checkpoint, save_page_checkpoint
-from app.scrapers.playwright_tier1.detail_fetch import fetch_secured_party_from_detail
 from app.scrapers.playwright_tier1.pagination import (
     read_pager_info,
     xhtml_grid_goto_last_page,
@@ -54,7 +53,7 @@ _COL_FILING_DATE = 6
 
 _EXTRACT_GRID_JS = """() => {
     const table = document.querySelector('#xhtml_grid');
-    if (!table) return { headers: [], rows: [] };
+    if (!table) return { headers: [], rows: [], lien_ids: [] };
     const headers = [];
     const headerRow = table.querySelector('thead tr');
     if (headerRow) {
@@ -63,15 +62,76 @@ _EXTRACT_GRID_JS = """() => {
         });
     }
     const rows = [];
+    const lienIds = [];
     table.querySelectorAll('tbody tr').forEach(tr => {
         const cells = [];
         tr.querySelectorAll('td').forEach(td => cells.push(td.textContent.trim()));
         rows.push(cells);
+        const hidden = tr.querySelector('input[type=hidden]');
+        let lid = hidden ? (hidden.value || '') : '';
+        if (!lid) {
+            const a = tr.querySelector('td a[onclick]');
+            const m = a && (a.getAttribute('onclick') || '').match(/\\((\\d+)\\)/);
+            if (m) lid = m[1];
+        }
+        lienIds.push(lid);
     });
-    return { headers, rows };
+    return { headers, rows, lien_ids: lienIds };
 }"""
 
 _HAS_GRID_JS = "() => !!document.querySelector('#xhtml_grid tbody tr')"
+
+# Reach a lien detail page by replicating NavigateLienInfo's form POST. Run in a
+# separate tab so the results grid (and pagination) on the main page survive.
+_DETAIL_POST_JS = """(args) => {
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = '/OnlineUCCSearch/OnlineLienInformation';
+    for (const [name, value] of [['lienId', args.lienId], ['source', args.source]]) {
+        const input = document.createElement('input');
+        input.type = 'hidden';
+        input.name = name;
+        input.value = String(value);
+        form.appendChild(input);
+    }
+    document.body.appendChild(form);
+    form.submit();
+}"""
+
+# Detail page = stacked section tables; return each as rows of cell text.
+_DETAIL_TABLES_JS = """() => [...document.querySelectorAll('table')].map(
+    table => [...table.querySelectorAll('tr')].map(
+        tr => [...tr.querySelectorAll('th, td')].map(c => (c.innerText || '').trim())
+    )
+)"""
+
+
+def _parse_ny_lien_detail(tables: list[list[list[str]]]) -> dict:
+    """Extract secured party and filing date from OnlineLienInformation tables.
+
+    Each section renders as its own table: a header row then data rows. The
+    secured-party table's header contains "Secured Party Name"; the lien-info
+    table's header contains "Date Filed". Returns the first secured party found.
+    """
+    secured_party: str | None = None
+    filing_date = None
+    for table in tables:
+        if not table:
+            continue
+        header = [c.strip().lower() for c in table[0]]
+        if secured_party is None and any("secured party name" in h for h in header):
+            for data_row in table[1:]:
+                if data_row and data_row[0].strip():
+                    secured_party = data_row[0].strip()
+                    break
+        if filing_date is None and "date filed" in header:
+            idx = header.index("date filed")
+            for data_row in table[1:]:
+                if idx < len(data_row) and data_row[idx].strip():
+                    filing_date = parse_date(data_row[idx].strip().split()[0])
+                    if filing_date:
+                        break
+    return {"secured_party": secured_party, "filing_date": filing_date}
 
 _SUBMIT_SEARCH_JS = """(args) => {
     const { searchLogic, term, filingDateFrom } = args;
@@ -267,6 +327,7 @@ class NewYorkScraper(PlaywrightTier1Scraper):
         grid = await page.evaluate(_EXTRACT_GRID_JS)
         headers = grid.get("headers") or []
         rows = grid.get("rows") or []
+        lien_ids = grid.get("lien_ids") or []
         sp_col = self._secured_party_column(headers)
         logger.info(
             "ny_grid_layout",
@@ -275,7 +336,10 @@ class NewYorkScraper(PlaywrightTier1Scraper):
             headers=headers,
             sample_rows=rows[:3],
         )
+        # NavigateLienInfo posts source = the first row's lien id for the whole set.
+        source = next((lid for lid in lien_ids if lid), "")
         page_rows: list[dict] = []
+        enriched = 0
         for row_idx, cells in enumerate(rows):
             filing = self._row_to_filing(
                 cells,
@@ -285,17 +349,28 @@ class NewYorkScraper(PlaywrightTier1Scraper):
             )
             if not filing:
                 continue
+            lien_id = lien_ids[row_idx] if row_idx < len(lien_ids) else ""
             need_detail = (
                 self.scrape_settings.fetch_detail
                 and not filing.get("secured_party")
+                and bool(lien_id)
             )
             if need_detail:
-                enriched = await self._enrich_row_detail(page, row_idx)
-                if enriched.get("secured_party"):
-                    filing["secured_party"] = enriched["secured_party"]
-                if enriched.get("filing_date") and not filing.get("filing_date"):
-                    filing["filing_date"] = enriched["filing_date"]
+                detail = await self._fetch_lien_detail(page, lien_id, source)
+                if detail.get("secured_party"):
+                    filing["secured_party"] = detail["secured_party"]
+                    enriched += 1
+                if detail.get("filing_date") and not filing.get("filing_date"):
+                    filing["filing_date"] = detail["filing_date"]
             page_rows.append(filing)
+        if page_rows and self.scrape_settings.fetch_detail:
+            logger.info(
+                "ny_detail_enriched",
+                profile=profile.name,
+                term=term,
+                page_rows=len(page_rows),
+                with_secured_party=enriched,
+            )
         return page_rows
 
     async def _search_term_paginated(
@@ -455,9 +530,31 @@ class NewYorkScraper(PlaywrightTier1Scraper):
 
         return all_rows, pages_consumed
 
-    async def _enrich_row_detail(self, page, row_index: int) -> dict:
-        selector = f"#xhtml_grid tbody tr:nth-child({row_index + 1}) td:first-child a"
-        return await fetch_secured_party_from_detail(page, lien_selector=selector)
+    async def _fetch_lien_detail(self, page, lien_id: str, source: str) -> dict:
+        """Fetch one lien's detail page in a separate tab; parse the secured party.
+
+        NY reaches a lien detail via a form POST (NavigateLienInfo). Running it
+        in a new tab keeps the results grid — and pagination — on the main page
+        intact. Best-effort: any failure leaves secured_party as None.
+        """
+        detail_page = await page.context.new_page()
+        try:
+            await detail_page.goto(
+                self.base_url, wait_until="domcontentloaded", timeout=30_000
+            )
+            await detail_page.evaluate(
+                _DETAIL_POST_JS, {"lienId": lien_id, "source": source or lien_id}
+            )
+            await detail_page.wait_for_load_state("networkidle", timeout=30_000)
+            tables = await detail_page.evaluate(_DETAIL_TABLES_JS)
+            return _parse_ny_lien_detail(tables)
+        except Exception as exc:
+            logger.warning(
+                "ny_detail_fetch_failed", lien_id=lien_id, error=str(exc)[:200]
+            )
+            return {"secured_party": None, "filing_date": None}
+        finally:
+            await detail_page.close()
 
     def _filing_date_from(self) -> str | None:
         """Filing-date lower bound (MM/DD/YYYY) from NY_SCRAPE_FILING_LOOKBACK_DAYS.
