@@ -6,16 +6,37 @@ for MCA search terms, shared pagination, and checkpoints.
 
 from __future__ import annotations
 
+from urllib.parse import urljoin
+
 from app.logging import get_logger
 from app.scrapers.parsers import parse_date
 from app.scrapers.playwright_tier1.base import PlaywrightTier1Scraper
 from app.scrapers.playwright_tier1.checkpoints import get_page_checkpoint, save_page_checkpoint
+from app.scrapers.playwright_tier1.detail_fetch import parse_detail_fields_from_text
 from app.scrapers.playwright_tier1.pagination import aspnet_grid_next_page
 from app.scrapers.playwright_tier1.settings import PlaywrightScrapeSettings
 
 logger = get_logger("nj_scraper")
 
 _GRID_SELECTOR = "[id*=orgResultsGridView]"
+
+# Extract each result row's cell text plus the first in-row link (the lien detail
+# link). secured_party is not in the results grid — only on the detail page.
+_GRID_ROWS_JS = """() => {
+    const grid = document.querySelector('[id*=orgResultsGridView]');
+    if (!grid) return [];
+    const result = [];
+    grid.querySelectorAll('tr').forEach(row => {
+        const cells = row.querySelectorAll('td');
+        if (cells.length < 6) return;
+        const link = row.querySelector('a[href]');
+        result.push({
+            cells: Array.from(cells).map(c => c.innerText.trim()),
+            detail_href: link ? (link.getAttribute('href') || '') : '',
+        });
+    });
+    return result;
+}"""
 
 
 class NewJerseyScraper(PlaywrightTier1Scraper):
@@ -134,23 +155,52 @@ class NewJerseyScraper(PlaywrightTier1Scraper):
         return all_rows
 
     async def _parse_grid(self, page) -> list[dict]:
-        rows_data = await page.evaluate("""() => {
-            const grid = document.querySelector('[id*=orgResultsGridView]');
-            if (!grid) return [];
-            const result = [];
-            grid.querySelectorAll('tr').forEach(row => {
-                const cells = row.querySelectorAll('td');
-                if (cells.length < 6) return;
-                result.push(Array.from(cells).map(c => c.innerText.trim()));
-            });
-            return result;
-        }""")
+        rows_data = await page.evaluate(_GRID_ROWS_JS)
         filings: list[dict] = []
-        for cell_texts in rows_data:
-            filing = self._row_to_filing(cell_texts)
-            if filing:
-                filings.append(filing)
+        enriched = 0
+        for row in rows_data:
+            filing = self._row_to_filing(row.get("cells", []))
+            if not filing:
+                continue
+            href = row.get("detail_href", "")
+            if self.scrape_settings.fetch_detail and href:
+                if await self._fetch_row_detail(page, filing, href):
+                    enriched += 1
+            filings.append(filing)
+        if filings and self.scrape_settings.fetch_detail:
+            logger.info(
+                "nj_detail_enriched",
+                page_rows=len(filings),
+                with_secured_party=enriched,
+            )
         return filings
+
+    async def _fetch_row_detail(self, page, filing: dict, href: str) -> bool:
+        """Open a filing's detail page in a new tab and fill in secured_party.
+
+        Best-effort: returns True when a secured party was found. Any failure
+        leaves the grid-derived filing untouched (``secured_party`` stays None),
+        so detail fetch never breaks the base scrape or the grid's pagination
+        state (the detail page is a separate tab; the grid ``page`` is left as-is).
+        """
+        if href.lower().startswith("javascript:"):
+            return False
+        url = href if href.lower().startswith("http") else urljoin(self.base_url, href)
+        detail_page = await page.context.new_page()
+        try:
+            await detail_page.goto(url, wait_until="networkidle", timeout=30_000)
+            body = await detail_page.evaluate("() => document.body.innerText || ''")
+            parsed = parse_detail_fields_from_text(body)
+            if parsed.get("secured_party"):
+                filing["secured_party"] = parsed["secured_party"]
+            if filing.get("filing_date") is None and parsed.get("filing_date"):
+                filing["filing_date"] = parsed["filing_date"]
+            return bool(parsed.get("secured_party"))
+        except Exception as exc:
+            logger.warning("nj_detail_fetch_failed", url=url[:200], error=str(exc)[:200])
+            return False
+        finally:
+            await detail_page.close()
 
     def _row_to_filing(self, cells: list[str]) -> dict | None:
         if len(cells) < 6:

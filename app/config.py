@@ -87,7 +87,9 @@ class Settings(BaseSettings):
     NJ_SCRAPE_MAX_PAGES: int = 50
     NJ_SCRAPE_MAX_TERMS: int = 20
     NJ_SCRAPE_MCA_TERM_LIMIT: int = 20
-    NJ_SCRAPE_FETCH_DETAIL: bool = False
+    # On by default: NJ secured-party only exists on per-filing detail pages,
+    # and without it NJ filings cannot be MCA-classified into leads.
+    NJ_SCRAPE_FETCH_DETAIL: bool = True
     NJ_SCRAPE_SEARCH_TERMS: str = ""
     NJ_SCRAPE_SEARCH_PROFILES: str = ""
 
