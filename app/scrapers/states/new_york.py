@@ -275,9 +275,17 @@ class NewYorkScraper(PlaywrightTier1Scraper):
     ) -> list[dict]:
         grid = await page.evaluate(_EXTRACT_GRID_JS)
         headers = grid.get("headers") or []
+        rows = grid.get("rows") or []
         sp_col = self._secured_party_column(headers)
+        logger.info(
+            "ny_grid_layout",
+            profile=profile.name,
+            term=term,
+            headers=headers,
+            sample_rows=rows[:3],
+        )
         page_rows: list[dict] = []
-        for row_idx, cells in enumerate(grid.get("rows") or []):
+        for row_idx, cells in enumerate(rows):
             filing = self._row_to_filing(
                 cells,
                 profile=profile,
