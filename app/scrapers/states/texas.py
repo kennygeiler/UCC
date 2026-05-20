@@ -150,8 +150,14 @@ class TexasScraper(PlaywrightTier1Scraper):
         await debtor_input.fill(term)
         await search_btn.click()
 
-        # Wait for AJAX update panel to settle.
-        await page.wait_for_timeout(5000)
+        # Wait for the count label to appear after AJAX update; fall back to fixed delay.
+        try:
+            await page.wait_for_selector(
+                "#ctl00_ContentPlaceHolder1_lblCount",
+                timeout=15_000,
+            )
+        except Exception:
+            await page.wait_for_timeout(3_000)
 
         # Check result count.
         count_el = page.locator("#ctl00_ContentPlaceHolder1_lblCount")

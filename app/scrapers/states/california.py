@@ -101,13 +101,16 @@ class CaliforniaScraper(PlaywrightTier1Scraper):
                 wait_until="networkidle",
                 timeout=60_000,
             )
-            # Wait for WAF challenge to resolve (page grows from ~900 bytes).
-            for _ in range(15):
-                html = await page.content()
-                if len(html) > 5_000:
-                    break
-                await page.wait_for_timeout(2_000)
-
+            # Wait for WAF challenge to resolve — initial page is ~900 bytes; body
+            # grows to full content once the challenge cookie is accepted.
+            try:
+                await page.wait_for_function(
+                    "() => document.body.innerText.length > 2000",
+                    timeout=30_000,
+                )
+            except Exception:
+                pass
+            html = await page.content()
             logger.info("waf_passed", state=self.state_code, html_len=len(html))
 
             terms = await self._load_search_terms()

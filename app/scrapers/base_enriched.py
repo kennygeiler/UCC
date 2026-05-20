@@ -73,7 +73,18 @@ class EnrichedScraperMixin(PostScrapePipelineMixin, UpsertPersistMixin):
         """Persist filings, finish run, optional post-scrape pipeline."""
         count = await self._persist(filings)
         await self._finish_run(run, count)
-        await self._run_post_scrape_pipeline()
+        try:
+            await self._run_post_scrape_pipeline()
+        except Exception as exc:
+            # Scrape succeeded — don't surface pipeline errors as scrape failures.
+            logger.error(
+                "post_scrape_pipeline_failed",
+                component="scraper",
+                status="error",
+                error_type=type(exc).__name__,
+                context=f"state={self.state_code}",
+                error=str(exc)[:400],
+            )
         return count
 
 
