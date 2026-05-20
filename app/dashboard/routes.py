@@ -3,6 +3,7 @@
 import csv
 import io
 from datetime import datetime, timezone
+from pathlib import Path
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Request, UploadFile, File
@@ -38,7 +39,7 @@ logger = get_logger("dashboard")
 
 router = APIRouter(prefix="/dashboard")
 router.include_router(mca_lenders_router)
-templates = Jinja2Templates(directory="app/dashboard/templates")
+templates = Jinja2Templates(directory=Path(__file__).parent / "templates")
 
 LEAD_TIER_CHIPS = CONSOLIDATION_TIERS
 
@@ -64,6 +65,17 @@ async def dashboard_home(request: Request):
     recent_runs = await get_recent_scraper_runs(limit=8)
     tier1_states = all_tier1_dashboard_rows()
     quality = await get_tier1_filing_quality()
+
+    # Hydrate in-memory status from DB for any state not tracked since last restart.
+    # `running` stays in-memory; last_result/last_error fall back to DB scraper_runs.
+    db_run_by_state: dict[str, dict] = {}
+    for run in recent_runs:
+        db_run_by_state.setdefault(run["state"], run)
+    for code, run in db_run_by_state.items():
+        st = _status_for_state(code)
+        if st["last_result"] is None:
+            st["last_result"] = {"inserted": run["records_found"], "status": run["status"]}
+
     for row in tier1_states:
         row["scrape_status"] = _status_for_state(row["state"])
         row.update(quality.get(row["state"], {}))

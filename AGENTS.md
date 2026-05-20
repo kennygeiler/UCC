@@ -4,17 +4,17 @@
 
 ## Commands
 ```bash
-# No commands available yet -- M1 has not been built.
-# After M1, these will be the standard commands:
-
 # Install dependencies
 pip install -e ".[dev]"
 
-# Run tests
-pytest
+# Run tests (unit only, no DB required)
+pytest -m "not slow"
+
+# Run integration tests (requires DATABASE_URL pointing at a live Postgres)
+pytest tests/integration/ -m integration -v
 
 # Run pipeline service
-uvicorn app.main:app --host 0.0.0.0 --port 8000
+uvicorn app.main:app --reload --port 8000
 
 # Run agent service
 python -m agent.main
@@ -28,6 +28,13 @@ python -m alembic upgrade head
 
 # Generate new migration
 python -m alembic revision --autogenerate -m "description"
+
+# Scrape a Tier 1 state manually
+python scripts/run_state_scrape.py --state FL
+python scripts/run_state_scrape.py --state NY --quick
+
+# Export MCA leads to CSV
+python scripts/export_mca_accounts_csv.py --state FL
 ```
 
 ## Architecture TL;DR
@@ -90,23 +97,35 @@ UCC Lead Generation Platform -- a Python 3.12+ automated pipeline that scrapes p
 
 ## Key Files
 ```
-pyproject.toml          -- Project metadata, dependencies, pytest config (NOT YET CREATED)
-app/main.py             -- FastAPI entry point for pipeline service (NOT YET CREATED)
-app/config.py           -- pydantic-settings configuration (NOT YET CREATED)
-app/db.py               -- SQLAlchemy async engine + session factory (NOT YET CREATED)
-app/models/             -- ORM models for all 13 tables (NOT YET CREATED)
-agent/main.py           -- Self-healing agent entry point (NOT YET CREATED)
-watchdog/main.py        -- Heartbeat watchdog entry point (NOT YET CREATED)
-Procfile                -- Railway service definitions (NOT YET CREATED)
-railway.toml            -- Railway deployment config (NOT YET CREATED)
-.github/workflows/ci.yml -- GitHub Actions CI (NOT YET CREATED)
-migrations/             -- Alembic migrations (NOT YET CREATED)
-tests/conftest.py       -- Shared test fixtures (NOT YET CREATED)
-.kiln/master-plan.md    -- 10 milestones, dependency graph, constraint coverage
-.kiln/docs/architecture.md -- Component map, data flow, module structure, DB schema
-.kiln/docs/tech-stack.md   -- All libraries, APIs, and deployment targets
+pyproject.toml               -- Project metadata, dependencies, pytest config
+app/main.py                  -- FastAPI entry point for pipeline service
+app/config.py                -- pydantic-settings configuration (all env vars)
+app/db.py                    -- SQLAlchemy async engine + session factory
+app/models/                  -- ORM models: filing, account, lead, dnc, job, mca_alias, operations
+app/scrapers/states/         -- One file per state scraper (florida.py, new_york.py, etc.)
+app/scrapers/scheduler.py    -- APScheduler: tiered cadence (Tier1=24h, Tier2=36h, Tier3=48h)
+app/scrapers/registry.py     -- State→scraper class + tier mapping
+app/mca/detector.py          -- MCA alias + fuzzy matching pipeline
+app/mca/scorer.py            -- Lead scoring (hot/warm/cold) from filing patterns
+app/consolidation/pipeline.py -- Post-scrape rollup: business_accounts + scoring
+app/enrichment/pipeline.py   -- Waterfall enrichment executor with HALT circuit breaker
+app/compliance/gate.py       -- 4-layer compliance gate (DNC→DataMerch→DNC.com→Blacklist)
+app/export/adapter.py        -- CampaignPlatformAdapter abstract interface (C-06)
+app/export/ghl_adapter.py    -- GoHighLevel concrete implementation
+app/export/csv_export.py     -- CSV fallback export for MCA lead accounts
+app/dashboard/routes.py      -- Dashboard HTTP routes (HTMX, Jinja2 templates)
+app/dashboard/queries.py     -- All dashboard SQL queries (stats, filings, leads, accounts)
+agent/graph.py               -- LangGraph self-healing agent (detect/diagnose/repair/verify/alert)
+watchdog/monitor.py          -- Heartbeat watchdog deadman switch (zero app/agent imports)
+Procfile                     -- Railway service definitions (web/agent/watchdog)
+railway.toml                 -- Railway deployment config (restart policies, health checks)
+.github/workflows/ci.yml     -- GitHub Actions CI (Postgres 16, alembic, pytest)
+migrations/versions/         -- Alembic migration files (6 migrations, current head)
+tests/conftest.py            -- Shared test fixtures (env vars, DB cache clearing)
+scripts/run_state_scrape.py  -- CLI to run any Tier 1 state scraper manually
+scripts/export_mca_accounts_csv.py -- CLI MCA leads CSV export
+.kiln/master-plan.md         -- 10 milestones, dependency graph, constraint coverage
 .kiln/docs/arch-constraints.md -- 17 hard constraints (C-01 through C-17)
-.kiln/docs/decisions.md -- 10 ADRs
 ```
 
 ## Constraints Summary (17 hard constraints)

@@ -14,3 +14,6 @@ htmlcov/
 .mypy_cache/
 settings.local.json
 .claude/
+.DS_Store
+.agents/
+_bmad/

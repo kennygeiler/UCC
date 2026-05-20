@@ -28,7 +28,7 @@ configure_logging()
 async def lifespan(application: FastAPI):
     """Manage application lifecycle — scheduler, DB engine disposal on shutdown."""
     scheduler = None
-    if Settings().SCRAPER_SCHEDULER_ENABLED:
+    if settings.SCRAPER_SCHEDULER_ENABLED:
         scheduler = create_scheduler()
         scheduler.start()
         application.state.scheduler = scheduler
